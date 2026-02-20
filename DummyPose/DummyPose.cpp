@@ -24,6 +24,6 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
     }
     catch (...)
     {
-        return 0; //should not let exceptions cross the DLL boundary
+        return 0; //should not let exceptions cross the dll boundary
     }
 }
