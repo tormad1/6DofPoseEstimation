@@ -54,6 +54,11 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
         //base dummy confidence
         out_pose->confidence = 0.9f;
 
+        //mode 1, low confidence frame
+        if (g_mode == 1) {
+            out_pose->confidence = 0.1f;
+        }
+
         //timestamp increasing
         std::int64_t ts = now_us;
         if (ts <= g_last_ts_us) {
