@@ -21,5 +21,6 @@ extern "C" {
 
     //will return 1 on success
     DUMMYPOSE_EXPORT int __cdecl GetDummyPose(DummyPose* out_pose);
-
+    DUMMYPOSE_EXPORT int __cdecl SetDummyPoseMode(int mode);
+    DUMMYPOSE_EXPORT int __cdecl ResetDummyPose();
 }

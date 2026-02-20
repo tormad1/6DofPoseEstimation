@@ -40,7 +40,6 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
         const double t = (now_us - g_t0_us) * 1e-6; //since start in seconds
 
         //dummy change for postion 
-        const float r = 0.5f; //radius of unity object in unity units
         out_pose->px = 0.5f * static_cast<float>(std::sin(t));
         out_pose->py = 0.1f * static_cast<float>(std::sin(t * 0.2)); //t * 0.2 changes the speed while the 0.2f * sets the amplitude
         out_pose->pz = 0.3f * static_cast<float>(std::sin(t * 1.3));
@@ -69,5 +68,30 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
     catch (...)
     {
         return 0; //should not let exceptions cross the dll boundary
+    }
+}
+
+extern "C" int __cdecl SetDummyPoseMode(int mode)
+{
+    try {
+        g_mode = mode;
+        return 1;
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+extern "C" int __cdecl ResetDummyPose()
+{
+    try {
+        g_t0_us = 0; //makes init in GetDummyPose happen again
+        g_last_ts_us = 0;
+        g_i = 0;
+        g_mode = 0;
+        return 1;
+    }
+    catch (...) {
+        return 0;
     }
 }
