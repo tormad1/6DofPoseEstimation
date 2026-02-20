@@ -64,8 +64,13 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
         if (ts <= g_last_ts_us) {
             ts = g_last_ts_us + 1;
         }
-        out_pose->timestamp_us = ts;
-        g_last_ts_us = ts;
+        if (g_mode == 2) {
+            out_pose->timestamp_us = g_last_ts_us;
+        }
+        else {
+            out_pose->timestamp_us = ts;
+            g_last_ts_us = ts;
+        }
 
         ++g_i;
         return 1;
