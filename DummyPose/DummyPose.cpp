@@ -3,10 +3,12 @@
 #include <random>
 #include <cmath>
 #include <chrono>
+#include <atomic>
+
 
 static std::int64_t g_t0_us = 0;
 static std::int64_t g_last_ts_us = 0;
-static int g_mode = 0;
+static std::atomic<int> g_mode{ 0 };
 static std::int64_t g_i = 0;
 
 static std::int64_t NowMicrosMonotonic()
@@ -31,11 +33,13 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
         g_t0_us = NowMicrosMonotonic();
         g_last_ts_us = g_t0_us - 1;
         g_i = 0;
-        g_mode = 0;
     }
 
     try
     {
+        const int mode = g_mode.exchange(0);
+        g_mode = 0;
+
         const std::int64_t now_us = NowMicrosMonotonic();
         const double t = (now_us - g_t0_us) * 1e-6; //since start in seconds
 
@@ -51,11 +55,17 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
         out_pose->qz = 0.0f;
         out_pose->qw = std::cos(half);
 
+        //mode 4, postion spiked frame
+        if (mode == 4) {
+            out_pose->px += 10.0f;
+            out_pose->pz += 10.0f;
+        }
+
         //base dummy confidence
         out_pose->confidence = 0.9f;
 
         //mode 1, low confidence frame
-        if (g_mode == 1) {
+        if (mode == 1) {
             out_pose->confidence = 0.1f;
         }
 
@@ -66,11 +76,11 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
         }
 
         //mode 2, duplicate timestamp frame
-        if (g_mode == 2) {
+        if (mode == 2) {
             out_pose->timestamp_us = g_last_ts_us;
         }
         //mode 3, old timestamp frame
-        else if (g_mode ==3) {
+        else if (mode ==3) {
             out_pose->timestamp_us = g_last_ts_us - 1000; 
         }
         else {
@@ -90,7 +100,7 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
 extern "C" int __cdecl SetDummyPoseMode(int mode)
 {
     try {
-        g_mode = mode;
+        g_mode.store(mode);
         return 1;
     }
     catch (...) {
@@ -104,7 +114,7 @@ extern "C" int __cdecl ResetDummyPose()
         g_t0_us = 0; //makes init in GetDummyPose happen again
         g_last_ts_us = 0;
         g_i = 0;
-        g_mode = 0;
+        g_mode.store(0);
         return 1;
     }
     catch (...) {
