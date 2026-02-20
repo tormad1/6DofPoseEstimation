@@ -64,8 +64,14 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
         if (ts <= g_last_ts_us) {
             ts = g_last_ts_us + 1;
         }
+
+        //mode 2, duplicate timestamp frame
         if (g_mode == 2) {
             out_pose->timestamp_us = g_last_ts_us;
+        }
+        //mode 3, old timestamp frame
+        else if (g_mode ==3) {
+            out_pose->timestamp_us = g_last_ts_us - 1000; 
         }
         else {
             out_pose->timestamp_us = ts;
