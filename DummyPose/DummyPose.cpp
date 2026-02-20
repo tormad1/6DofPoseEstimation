@@ -2,10 +2,12 @@
 
 #include <random>
 #include <cmath>
-
+#include <chrono>
 static std::int64_t NowMicrosMonotonic()
 {
-    return NULL;
+    using clock = std::chrono::steady_clock;
+    auto now = clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::microseconds>(now).count();
 }
 
 static void RandomUnitQuaternion()
