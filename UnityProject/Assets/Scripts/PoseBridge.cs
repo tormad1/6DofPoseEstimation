@@ -30,7 +30,13 @@ public class PoseBridge : MonoBehaviour
     {
         stopwatch = Stopwatch.StartNew();
     }
-
+    void Update()
+    {
+        if (useDummy)
+        {
+            GetPose();
+        }
+    }
     // Update is called once per frame
     public int GetPose(out Pose pose)
     {
