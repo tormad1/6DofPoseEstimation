@@ -1,47 +1,17 @@
 #include "DummyPose.h"
 
-#include <random>
 #include <cmath>
-#include <chrono>
-#include <atomic>
 
 
-static std::int64_t g_t0_us = 0;
-static std::int64_t g_last_ts_us = 0;
-static std::atomic<int> g_mode{ 0 };
-static std::int64_t g_i = 0;
-
-static std::int64_t NowMicrosMonotonic()
-{
-    using clock = std::chrono::steady_clock;
-    auto now = clock::now().time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::microseconds>(now).count();
-}
-
-static void RandomUnitQuaternion()
-{
-
-}
-
-extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
+extern "C" int __cdecl GetDummyPose(DummyPose* out_pose, std::int64_t timestamp_us, int mode)
 {
     if (out_pose == nullptr) {
         return 0;
     }
 
-    if (g_t0_us == 0) {
-        g_t0_us = NowMicrosMonotonic();
-        g_last_ts_us = g_t0_us - 1;
-        g_i = 0;
-    }
-
     try
     {
-        const int mode = g_mode.exchange(0);
-        g_mode = 0;
-
-        const std::int64_t now_us = NowMicrosMonotonic();
-        const double t = (now_us - g_t0_us) * 1e-6; //since start in seconds
+        const double t = static_cast<double>(timestamp_us) * 1e-6;
 
         //dummy change for postion 
         out_pose->px = 0.5f * static_cast<float>(std::sin(t));
@@ -69,55 +39,11 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose)
             out_pose->confidence = 0.1f;
         }
 
-        //timestamp increasing
-        std::int64_t ts = now_us;
-        if (ts <= g_last_ts_us) {
-            ts = g_last_ts_us + 1;
-        }
-
-        //mode 2, duplicate timestamp frame
-        if (mode == 2) {
-            out_pose->timestamp_us = g_last_ts_us;
-        }
-        //mode 3, old timestamp frame
-        else if (mode ==3) {
-            out_pose->timestamp_us = g_last_ts_us - 1000; 
-        }
-        else {
-            out_pose->timestamp_us = ts;
-            g_last_ts_us = ts;
-        }
-
-        ++g_i;
+        out_pose->timestamp_us = timestamp_us;
         return 1;
     }
     catch (...)
     {
         return 0; //should not let exceptions cross the dll boundary
-    }
-}
-
-extern "C" int __cdecl SetDummyPoseMode(int mode)
-{
-    try {
-        g_mode.store(mode);
-        return 1;
-    }
-    catch (...) {
-        return 0;
-    }
-}
-
-extern "C" int __cdecl ResetDummyPose()
-{
-    try {
-        g_t0_us = 0; //makes init in GetDummyPose happen again
-        g_last_ts_us = 0;
-        g_i = 0;
-        g_mode.store(0);
-        return 1;
-    }
-    catch (...) {
-        return 0;
     }
 }
