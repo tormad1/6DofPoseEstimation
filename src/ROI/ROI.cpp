@@ -6,13 +6,10 @@ int main() {
 
 	// Load the image
 	cv::Mat image = loadImage("monster.jpg");
-	saveImage(image, "out.jpg");
+	cv::Mat resizedImage = letterboxResizeImage(image, 640, 640);
+	saveImage(resizedImage, "resized.jpg");
 
-	// Test YOLO model running.
-	test_loadModel();
-
-	//selectROI(image);
-	predeterminedCrop(image);
+	predeterminedCrop(resizedImage);
 
 
 	return 0;
