@@ -18,6 +18,21 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\ROI\crop.cpp" />
+    <ClCompile Include="src\ROI\load-model.cpp" />
+    <ClCompile Include="src\ROI\ROI.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\ROI\crop.hpp" />
+    <ClInclude Include="src\ROI\load-model.hpp" />
+    <ClInclude Include="src\ROI\ROI.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include=".gitignore" />
+    <None Include="6DofPoseEstimation.slnx" />
+    <None Include="README.md" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -135,9 +150,6 @@
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);onnxruntime.lib;opencv_world4130.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="src\main.cpp" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
