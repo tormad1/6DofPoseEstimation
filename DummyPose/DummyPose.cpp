@@ -13,6 +13,16 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose, std::int64_t timestamp_
     {
         const double t = static_cast<double>(timestamp_us) * 1e-6;
 
+        //base dummy confidence
+        out_pose->confidence = 0.9f;
+
+        //mode 1, low confidence frame
+        if (mode == 1) {
+            out_pose->confidence = 0.1f;
+        }
+        if (mode == 2) {
+            return 0;
+        }
         //dummy change for postion 
         out_pose->px = 0.5f * static_cast<float>(std::sin(t));
         out_pose->py = 0.1f * static_cast<float>(std::sin(t * 0.2)); //t * 0.2 changes the speed while the 0.2f * sets the amplitude
@@ -29,14 +39,6 @@ extern "C" int __cdecl GetDummyPose(DummyPose* out_pose, std::int64_t timestamp_
         if (mode == 4) {
             out_pose->px += 10.0f;
             out_pose->pz += 10.0f;
-        }
-
-        //base dummy confidence
-        out_pose->confidence = 0.9f;
-
-        //mode 1, low confidence frame
-        if (mode == 1) {
-            out_pose->confidence = 0.1f;
         }
 
         out_pose->timestamp_us = timestamp_us;
