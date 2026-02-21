@@ -1,3 +1,5 @@
 .DS_Store
 *.pt
 .vs
+x64
+6DofPose.*

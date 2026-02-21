@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="6DofPoseEstimation.vcxproj" />
+  <Project Path="6DofPoseEstimation.vcxproj" Id="f4d0c4fd-08bb-442a-8eee-b27403ac36b1" />
 </Solution>
