@@ -7,8 +7,10 @@ public class PoseBridge : MonoBehaviour
     public bool useDummy = true;
     public Texture2D croppedFrame;
     public int mode = 0;
-
+    public int intervalFrames = 10;
+    private int frameCount = 0;
     private Stopwatch stopwatch;
+    public PoseManager poseManager;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct Pose
@@ -32,9 +34,16 @@ public class PoseBridge : MonoBehaviour
     }
     void Update()
     {
-        if (useDummy)
+        frameCount++;
+        if (useDummy && frameCount == intervalFrames)
         {
-            GetPose();
+            frameCount=0;
+            int status = GetPose(out var pose);
+            //Debug.Log(status);
+            if (status == 1 && poseManager != null)
+            {
+                poseManager.OnPose(pose);
+            }
         }
     }
     // Update is called once per frame
@@ -47,6 +56,7 @@ public class PoseBridge : MonoBehaviour
         {
             return DummyPoseNative.GetDummyPose(ref pose, timestampMicro, mode);
         }
+
         //return RealPoseNative.GetDummyPose(ref pose, timestampMicro, mode);
         //NOT IMPLEMENTED YET
 
