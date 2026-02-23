@@ -188,7 +188,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PoseBridge
   useDummy: 1
   croppedFrame: {fileID: 0}
-  mode: 0
   intervalFrames: 10
   poseManager: {fileID: 373557377}
 --- !u!1 &449560824
@@ -271,7 +270,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: e03be4bd6b2f2f34b847e52900c072f5, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
