@@ -6,7 +6,7 @@ public class PoseBridge : MonoBehaviour
 {
     public bool useDummy = true;
     public Texture2D croppedFrame;
-    public int mode = 0;
+    private int mode = 0;
     public int intervalFrames = 10;
     private int frameCount = 0;
     private Stopwatch stopwatch;
