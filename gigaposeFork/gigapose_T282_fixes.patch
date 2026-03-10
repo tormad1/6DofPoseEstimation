@@ -1,0 +1,137 @@
+diff --git a/configs/model/ae_net/dinov2_l.yaml b/configs/model/ae_net/dinov2_l.yaml
+index 147aa36..f9fc622 100644
+--- a/configs/model/ae_net/dinov2_l.yaml
++++ b/configs/model/ae_net/dinov2_l.yaml
+@@ -3,8 +3,9 @@ model_name: dinov2_vitl14
+ 
+ dinov2_model:
+   _target_: torch.hub.load
+-  repo_or_dir: facebookresearch/dinov2
++  repo_or_dir: /home/tormad/dinov2
+   model: ${model.ae_net.model_name}
++  source: local
+ 
+ max_batch_size: 64
+-descriptor_size: 1024
+\ No newline at end of file
++descriptor_size: 1024
+diff --git a/environment.yml b/environment.yml
+index 267255d..c84165f 100644
+--- a/environment.yml
++++ b/environment.yml
+@@ -6,7 +6,7 @@ channels:
+   - conda-forge
+   - defaults
+ dependencies:
+-  - pip
++  - pip<24.1
+   - python=3.9.6
+   - pip:
+     - torch
+@@ -15,7 +15,7 @@ dependencies:
+     - torchmetrics==0.10.3
+     - fvcore
+     - iopath
+-    - xformers==0.0.18
++    # - xformers==0.0.18
+     - opencv-python 
+     - pycocotools 
+     - matplotlib 
+@@ -26,10 +26,10 @@ dependencies:
+     - hydra-colorlog
+     - hydra-core
+     - gdown
+-    - pytorch-lightning==1.8.1
++    - pytorch-lightning==1.8.3
+     - pandas
+     - ruamel.yaml
+     - pyrender
+     - wandb
+     - distinctipy
+-    - blenderproc
+\ No newline at end of file
++    - blenderproc
+diff --git a/src/dataloader/test.py b/src/dataloader/test.py
+index 51b2cf1..ee3fc3f 100644
+--- a/src/dataloader/test.py
++++ b/src/dataloader/test.py
+@@ -69,7 +69,7 @@ class GigaPoseTestSet(GigaPoseTrainSet):
+ 
+         # load the dataset
+         webdataset_dir = self.root_dir / self.dataset_name
+-        web_dataset = WebSceneDataset(webdataset_dir / split, depth_scale=depth_scale)
++        web_dataset = WebSceneDataset(webdataset_dir / split, depth_scale=depth_scale, load_depth=False)
+         self.web_dataloader = IterableWebSceneDataset(web_dataset, set_length=True)
+ 
+         # load the template dataset
+diff --git a/src/models/gigaPose.py b/src/models/gigaPose.py
+index 7a015d8..3764647 100644
+--- a/src/models/gigaPose.py
++++ b/src/models/gigaPose.py
+@@ -517,6 +517,9 @@ class GigaPose(pl.LightningModule):
+             tar_label = torch.from_numpy(tar_label_np).to(device)
+ 
+             # template data
++            tar_label = torch.ones_like(tar_label)
++            if dataset_name == "T282":
++                tar_label = torch.ones_like(tar_label)
+             src_ae_features = template_data.ae_features[tar_label - 1]
+             src_masks = template_data.mask[tar_label - 1]
+ 
+@@ -549,6 +552,8 @@ class GigaPose(pl.LightningModule):
+             tar_label_np = np.asarray(batch.infos.label).astype(np.int32)
+             tar_label = torch.from_numpy(tar_label_np).to(device)
+ 
++            if dataset_name == "T282":
++                tar_label = torch.ones_like(tar_label)
+             src_ist_features = template_data.ist_features[tar_label - 1]
+             tar_ist_features = self.ist_net.forward_by_chunk(batch.tar_img[idx_sample])
+ 
+@@ -612,7 +617,7 @@ class GigaPose(pl.LightningModule):
+         selected_idxs, predictions = self.filter_and_save(
+             predictions, test_list=batch.test_list, time=total_time, save_path=save_path
+         )
+-        if idx_batch % self.log_interval == 0 and self.max_num_dets_per_forward is None:
++        if self.log_interval > 0 and idx_batch % self.log_interval == 0 and self.max_num_dets_per_forward is None:
+             vis_img = self.vis_retrieval(
+                 template_data=template_data,
+                 batch=batch,
+diff --git a/src/models/network/ae_net.py b/src/models/network/ae_net.py
+index 9aa1a28..53d97c9 100644
+--- a/src/models/network/ae_net.py
++++ b/src/models/network/ae_net.py
+@@ -35,7 +35,7 @@ class AENet(pl.LightningModule):
+ 
+     def reset_with_pretrained_weights(self):
+         device = self.device
+-        self.dinov2_model = torch.hub.load("facebookresearch/dinov2", self.model_name)
++        self.dinov2_model = torch.hub.load("/home/tormad/dinov2", self.model_name, source="local")
+         self.dinov2_model = self.dinov2_model.to(device)
+ 
+     def get_toUpdate_parameters(self):
+diff --git a/src/scripts/convert_scenewise_to_imagewise.py b/src/scripts/convert_scenewise_to_imagewise.py
+index 87ced0c..470a3cc 100644
+--- a/src/scripts/convert_scenewise_to_imagewise.py
++++ b/src/scripts/convert_scenewise_to_imagewise.py
+@@ -26,7 +26,7 @@ def convert_scene_to_imagewise(
+     if "hb" in str(input_scene_dir) or "itodd" in str(input_scene_dir) or "hope" in str(input_scene_dir):
+         gt_available = False
+     else:
+-        gt_available = True
++        gt_available = False
+     scene_data = bop_scenewise.load_scene_data(
+         input_scene_dir,
+         load_scene_camera=True,
+diff --git a/src/utils/inout.py b/src/utils/inout.py
+index 1d1b871..728c446 100644
+--- a/src/utils/inout.py
++++ b/src/utils/inout.py
+@@ -411,7 +411,7 @@ def load_test_list_and_cnos_detections(
+     - No sorting techniques since target_objects is not available
+     """
+     # load cnos detections
+-    if dataset_name in ["lmo", "tless", "tudl", "icbin", "itodd", "hb", "ycbv"]:
++    if dataset_name in ["lmo", "tless", "tudl", "icbin", "itodd", "hb", "ycbv", "T282"]:
+         year = "19"
+         det_model = "cnos-fastsam"
+     elif dataset_name in ["hope"]:
