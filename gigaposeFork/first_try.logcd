@@ -1,0 +1,44 @@
+/home/tormad/miniconda3/envs/gigapose/lib/python3.9/site-packages/lightning_utilities/core/imports.py:10: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[2026-03-08 22:45:28,694][__main__][INFO] - Initializing logger, callbacks and trainer
+[2026-03-08 22:45:28,697][__main__][INFO] - Tensorboard logger initialized at ./gigaPose_datasets/results/large_first_try/gigapose
+ModelCheckpoint(save_last=True, save_top_k=-1, monitor=None) will duplicate the last checkpoint saved.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+[2026-03-08 22:45:28,948][__main__][INFO] - Trainer initialized!
+[2026-03-08 22:45:30,291][dinov2][INFO] - using MLP layer as FFN
+[2026-03-08 22:45:35,511][src.models.network.ae_net][INFO] - Initialize AENet done!
+[2026-03-08 22:45:35,592][src.models.network.ist_net][INFO] - Init for Regressor with done!
+[2026-03-08 22:45:35,628][src.models.network.ist_net][INFO] - Init weights for ISTNet done!
+[2026-03-08 22:45:35,629][src.models.network.ist_net][INFO] - Init for ISTNet done!
+[2026-03-08 22:45:35,634][src.models.gigaPose][INFO] - Initialize GigaPose done!
+[2026-03-08 22:45:35,634][__main__][INFO] - Model initialized!
+[2026-03-08 22:45:35,833][src.dataloader.test][INFO] - Split: test for lmo!
+[2026-03-08 22:45:35,836][src.custom_megapose.web_scene_dataset][INFO] - WebSceneDataset: 1 shards
+[2026-03-08 22:45:35,837][src.custom_megapose.web_scene_dataset][INFO] - IterableWebSceneDataset: 200 samples
+  0%|          | 0/8 [00:00<?, ?it/s]100%|██████████| 8/8 [00:00<00:00, 6097.48it/s]
+[2026-03-08 22:45:35,841][src.custom_megapose.template_dataset][INFO] - Loaded 8 template datas
+[2026-03-08 22:45:35,992][src.utils.inout][INFO] - Loading test list from gigaPose_datasets/datasets/lmo/test_targets_bop19.json
+0it [00:00, ?it/s]787it [00:00, 7850.45it/s]1445it [00:00, 7382.52it/s]
+[2026-03-08 22:45:36,191][src.utils.inout][INFO] - Detections: 1445 test samples!
+[2026-03-08 22:45:36,203][src.dataloader.keypoints][INFO] - Initialized normalized center patch done!
+  0%|          | 0/8 [00:00<?, ?it/s]100%|██████████| 8/8 [00:00<00:00, 19519.74it/s]
+[2026-03-08 22:45:36,215][src.custom_megapose.template_dataset][INFO] - Loaded 8 template datas
+[2026-03-08 22:45:36,216][__main__][INFO] - Dataloaders initialized!
+Initializing distributed: GLOBAL_RANK: 0, MEMBER: 1/1
+----------------------------------------------------------------------------------------------------
+distributed_backend=nccl
+All distributed processes registered. Starting with 1 processes
+----------------------------------------------------------------------------------------------------
+
+Restoring states from the checkpoint path at ./gigaPose_datasets/pretrained/gigaPose_v1.ckpt
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+Loaded model weights from checkpoint at ./gigaPose_datasets/pretrained/gigaPose_v1.ckpt
+Testing: 0it [00:00, ?it/s]Testing:   0%|          | 0/200 [00:00<?, ?it/s]Testing DataLoader 0:   0%|          | 0/200 [00:00<?, ?it/s][2026-03-08 22:45:42,887][src.models.gigaPose][INFO] - Initializing template data ...
+
+  0%|          | 0/8 [00:00<?, ?it/s][A
+ 12%|█▎        | 1/8 [00:10<01:16, 10.93s/it][A
+ 25%|██▌       | 2/8 [00:20<01:02, 10.40s/it][A
+ 38%|███▊      | 3/8 [00:30<00:50, 10.04s/it][A

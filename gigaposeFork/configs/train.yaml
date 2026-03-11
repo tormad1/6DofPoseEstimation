@@ -1,0 +1,24 @@
+defaults:
+  - user: default
+  - machine: local
+  - callback: base
+  - model: large
+  - data: all
+  - _self_
+
+save_dir: ${machine.root_dir}/results/${name_exp}
+name_exp: train
+use_pretrained: true 
+
+train_dataset_id: 0 # 0 for gso, 1 for shapenet, 2 for both
+nets_to_train: all
+
+# parameters for rendering templates for training
+start_idx:
+end_idx:
+
+# name for rendering templates
+test_dataset_name: # let it empty for BOP'23 dataset and set to hope, handal, hot3d for BOP'24 datasets
+
+# parameters for custom objects
+custom_dataset_name: custom
