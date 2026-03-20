@@ -34,7 +34,7 @@ public class PoseBridge : MonoBehaviour
     {
         if (useDummy)
         {
-            GetPose();
+            GetPose(out Pose pose);
         }
     }
     // Update is called once per frame
