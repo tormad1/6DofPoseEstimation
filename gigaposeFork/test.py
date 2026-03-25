@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore")
 logger = get_logger(__name__)
 
 
+
 @hydra.main(version_base=None, config_path="configs", config_name="test")
 def run_test(cfg: DictConfig):
     OmegaConf.set_struct(cfg, False)
