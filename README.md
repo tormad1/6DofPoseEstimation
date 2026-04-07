@@ -8,3 +8,8 @@ The model will first be downloaded, but the goal is to have a trained model on o
 Input image must be transformed into a 640x640 image.
 roi cropping is layed out in a format of (x, y, w, h).
 
+
+After passing through YOLO, you will be given crop coords.
+Reverse the cropping and scale the coords back to the original image
+for max resolution.
+

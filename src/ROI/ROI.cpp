@@ -5,12 +5,11 @@
 int main() {
 
 	// Load the image
-	cv::Mat image = loadImage("monster.jpg");
+	cv::Mat image = loadImage("bottle.jpg");
 	cv::Mat resizedImage = letterboxResizeImage(image, 640, 640);
 	saveImage(resizedImage, "resized.jpg");
 
-	predeterminedCrop(resizedImage);
-
+	runInference(resizedImage);
 
 	return 0;
 }

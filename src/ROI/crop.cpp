@@ -69,14 +69,13 @@ cv::Mat letterboxResizeImage(const cv::Mat image, int width, int height) {
 	int paddingX = (width - newImgW) / 2;
 	int paddingY = (height - newImgH) / 2;
 
-	// Resize
 	cv::Mat resized;
 	cv::resize(image, resized, cv::Size(newImgW, newImgH));
 
-	// Create padded image (YOLO usually uses 114 gray)
+	// YOLO uses 114 as padding colour.
 	cv::Mat output(height, width, image.type(), cv::Scalar(114, 114, 114));
 
-	// Copy resized image into center
+	// Copy resized image into center of blank output image.
 	resized.copyTo(
 		output(cv::Rect(paddingX, paddingY, resized.cols, resized.rows))
 	);
