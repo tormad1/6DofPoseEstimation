@@ -48,16 +48,15 @@ std::vector<float> preprocess(const cv::Mat& letterboxed) {
     return tensor;
 }
 
-void runInference(const cv::Mat& letterboxed) {
+cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
 
-    // --- Load model (same as test_loadModel) ---
     Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "YoloCropper");
     Ort::SessionOptions sessionOptions;
     sessionOptions.SetIntraOpNumThreads(4);
     sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-    Ort::Session session(env, L"resources/models/yolov8m.onnx", sessionOptions);
+    Ort::Session session(env, L"resources/models/yolov8m-canned.onnx", sessionOptions);
 
-    // --- Preprocess ---
+
     std::vector<float> inputTensor = preprocess(letterboxed);
 
     // --- Describe the tensor shape to ONNX Runtime ---
@@ -99,37 +98,33 @@ void runInference(const cv::Mat& letterboxed) {
         1                  // number of outputs
     );
 
+
     // --- Postprocess and crop ---
     std::vector<Detection> detections = postprocess(
         outputTensors[0],
-        letterboxed.cols,   // NOTE: pass original image dims here, see below
-        letterboxed.rows
+        original.cols,
+        original.rows
     );
 
-    cv::Mat cropped = cropDetection(letterboxed, detections);
-    // temporary - just to verify it worked
-    saveImage(cropped, "detected_crop.jpg"); // you'll need to include crop.hpp
+    cv::Mat cropped = cropDetection(original, detections);
+    return cropped;
 }
 
-std::vector<Detection> postprocess(
-    Ort::Value& outputTensor,
-    int origW, int origH,
-    int modelW, int modelH,
-    float confThreshold)
-{
+std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int origH, int modelW, int modelH, float confThreshold){
     // Get raw pointer to the output data
     float* data = outputTensor.GetTensorMutableData<float>();
+    auto typeInfo = outputTensor.GetTensorTypeAndShapeInfo();
+    auto outputShape = typeInfo.GetShape();
 
-    // Output is [1, 84, 8400] but stored flat in memory.
-    // To get value at [batch=0, row=r, col=c]: data[r * 8400 + c]
-    // rows 0-3   = x_center, y_center, width, height
-    // rows 4-83  = class scores for COCO classes 0-79
-    const int numBoxes = 8400;
-    const int numClasses = 80;
-    const int bottleClass = 39;
 
-    // Work out the letterbox scale + padding so we can map
-    // box coords back from 640x640 space to original image space
+    const int numBoxes = outputShape[2];
+    const int numClasses = outputShape[1];
+
+    // For custom model, the class is 0 to detect cans.
+	// For the original model, the class is 39 to detect bottles.
+    const int targetClass = 0;
+
+    // Work out the letterbox scale
     float scale = std::min(
         static_cast<float>(modelW) / origW,
         static_cast<float>(modelH) / origH
@@ -157,7 +152,7 @@ std::vector<Detection> postprocess(
 
         // Skip if below threshold or not a bottle
         if (bestScore < confThreshold) continue;
-        if (bestClass != bottleClass)  continue;
+        if (bestClass != targetClass)  continue;
 
         // Decode box from center format (cx,cy,w,h) in 640x640 space
         float cx = data[0 * numBoxes + i];

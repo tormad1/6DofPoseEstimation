@@ -13,3 +13,7 @@ After passing through YOLO, you will be given crop coords.
 Reverse the cropping and scale the coords back to the original image
 for max resolution.
 
+
+### References
+https://universe.roboflow.com/project-qynru/can-gcc8l
+This is the model i will be using. The online inferencing detected the images properly.

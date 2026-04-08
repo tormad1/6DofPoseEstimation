@@ -3,7 +3,7 @@
 
 cv::Mat loadImage(std::string imgName){
 	
-	std::string fullpath = "resources/images/" + imgName;
+	std::string fullpath = "resources/images/source/" + imgName;
 	cv::Mat image = cv::imread(fullpath);
 	
 	// Safety Check
@@ -15,12 +15,13 @@ cv::Mat loadImage(std::string imgName){
 	return image;
 }
 
-// Save feature with custom name.
+// Custom path save.
 void saveImage(cv::Mat image, std::string name) {
 
-	std::string fullpath = "resources/images/" + name;
+	std::string croppedName = "cropped-" + name;
+	std::string fullpath = "resources/images/output/" + croppedName;
 	cv::imwrite(fullpath, image);
-	std::cout << "Image has been saved" << std::endl;
+	std::cout << "Image has been saved to: " << fullpath << std::endl;
 }
 
 
@@ -30,7 +31,7 @@ void selectROI(cv::Mat image) {
 	std::cout << "Selected ROI: " << roi << std::endl;
 	cv::Mat croppedImage = image(roi);
 
-	std::string outname = "cropped.jpg";
+	std::string outname = "manual-cropped.jpg";
 	saveImage(croppedImage, outname);
 }
 
