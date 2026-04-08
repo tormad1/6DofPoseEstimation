@@ -18,21 +18,27 @@
     <ClCompile Include="src\ROI\crop.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ROI\load-model.cpp">
+    <ClCompile Include="src\ROI\ROI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ROI\ROI.cpp">
+    <ClCompile Include="src\ROI\model.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ROI\test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\ROI\load-model.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\ROI\crop.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\ROI\ROI.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ROI\model.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ROI\test.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
