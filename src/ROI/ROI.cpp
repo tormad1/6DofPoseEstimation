@@ -4,6 +4,8 @@
 
 int main() {
 
+	initONNXRuntime();
+
 	// Load the image
 	std::string imageName = "monster-4.jpg";
 

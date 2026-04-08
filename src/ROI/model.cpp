@@ -48,19 +48,26 @@ std::vector<float> preprocess(const cv::Mat& letterboxed) {
     return tensor;
 }
 
-cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
 
+void initONNXRuntime() {
+    // Init setup
     Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "YoloCropper");
     Ort::SessionOptions sessionOptions;
     sessionOptions.SetIntraOpNumThreads(4);
     sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
     Ort::Session session(env, L"resources/models/yolov8m-canned.onnx", sessionOptions);
+}
+
+
+
+cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
+    
 
 
     std::vector<float> inputTensor = preprocess(letterboxed);
 
-    // --- Describe the tensor shape to ONNX Runtime ---
-    // Shape is [batch, channels, height, width] = [1, 3, 640, 640]
+    // Shape is [image, colour channels, height, width]
+    // [1, 3, 640, 640]
     std::vector<int64_t> inputShape = { 1, 3, letterboxed.rows, letterboxed.cols };
 
     Ort::MemoryInfo memoryInfo = Ort::MemoryInfo::CreateCpu(
@@ -70,10 +77,10 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
     // Wrap your raw float vector in an OrtValue tensor
     Ort::Value inputOrtTensor = Ort::Value::CreateTensor<float>(
         memoryInfo,
-        inputTensor.data(),       // pointer to your float data
-        inputTensor.size(),       // total number of floats
-        inputShape.data(),        // shape array
-        inputShape.size()         // number of dimensions
+        inputTensor.data(),       
+        inputTensor.size(),       
+        inputShape.data(),        
+        inputShape.size()         
     );
 
     // --- Get input/output node names from the model ---
@@ -91,11 +98,11 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
     // --- Run ---
     auto outputTensors = session.Run(
         Ort::RunOptions{ nullptr },
-        &inputName,        // array of input names
-        &inputOrtTensor,   // array of input tensors
-        1,                 // number of inputs
-        &outputName,       // array of output names
-        1                  // number of outputs
+        &inputName,        
+        &inputOrtTensor,   
+        1,                 
+        &outputName,       
+        1                  
     );
 
 
@@ -180,8 +187,6 @@ std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int orig
         classIds.push_back(bestClass);
     }
 
-    // NMS - removes overlapping boxes keeping only the best one
-    // Any two boxes with more than 45% overlap get deduplicated
     std::vector<int> kept;
     cv::dnn::NMSBoxes(boxes, scores, confThreshold, 0.45f, kept);
 
