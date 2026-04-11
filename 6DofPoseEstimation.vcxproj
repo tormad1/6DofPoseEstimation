@@ -27,7 +27,6 @@
   <ItemGroup>
     <ClInclude Include="src\ROI\crop.hpp" />
     <ClInclude Include="src\ROI\model.hpp" />
-    <ClInclude Include="src\ROI\ROI.hpp" />
     <ClInclude Include="src\ROI\test.hpp" />
   </ItemGroup>
   <ItemGroup>

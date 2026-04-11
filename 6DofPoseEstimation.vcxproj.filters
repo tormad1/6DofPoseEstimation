@@ -32,9 +32,6 @@
     <ClInclude Include="src\ROI\crop.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ROI\ROI.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\ROI\model.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

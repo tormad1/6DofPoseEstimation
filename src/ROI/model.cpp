@@ -49,19 +49,9 @@ std::vector<float> preprocess(const cv::Mat& letterboxed) {
 }
 
 
-void initONNXRuntime() {
-    // Init setup
-    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "YoloCropper");
-    Ort::SessionOptions sessionOptions;
-    sessionOptions.SetIntraOpNumThreads(4);
-    sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-    Ort::Session session(env, L"resources/models/yolov8m-canned.onnx", sessionOptions);
-}
 
 
-
-cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
-    
+cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx) {
 
 
     std::vector<float> inputTensor = preprocess(letterboxed);
@@ -86,8 +76,8 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
     // --- Get input/output node names from the model ---
     Ort::AllocatorWithDefaultOptions allocator;
 
-    auto inputNamePtr = session.GetInputNameAllocated(0, allocator);
-    auto outputNamePtr = session.GetOutputNameAllocated(0, allocator);
+    auto inputNamePtr = ctx.session.GetInputNameAllocated(0, allocator);
+    auto outputNamePtr = ctx.session.GetOutputNameAllocated(0, allocator);
 
     const char* inputName = inputNamePtr.get();
     const char* outputName = outputNamePtr.get();
@@ -96,7 +86,7 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed) {
     std::cout << "Output name: " << outputName << std::endl;
 
     // --- Run ---
-    auto outputTensors = session.Run(
+    auto outputTensors = ctx.session.Run(
         Ort::RunOptions{ nullptr },
         &inputName,        
         &inputOrtTensor,   
@@ -124,8 +114,8 @@ std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int orig
     auto outputShape = typeInfo.GetShape();
 
 
-    const int numBoxes = outputShape[2];
-    const int numClasses = outputShape[1];
+    const int64_t numBoxes = outputShape[2];
+    const int64_t numClasses = outputShape[1];
 
     // For custom model, the class is 0 to detect cans.
 	// For the original model, the class is 39 to detect bottles.

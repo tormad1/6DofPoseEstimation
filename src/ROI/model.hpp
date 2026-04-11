@@ -1,7 +1,8 @@
 #pragma once
 #include <onnxruntime_cxx_api.h>
+#include <opencv2/opencv.hpp>
 
-
+// Detection Decleration
 struct Detection {
     cv::Rect2f box;   // in original image coordinates
     float       score;
@@ -17,12 +18,34 @@ std::vector<Detection> postprocess(
     float          confThreshold = 0.45f
 );
 
-cv::Mat cropDetection(const cv::Mat& image, const std::vector<Detection>& detections);
+struct OrtContext {
+    Ort::Env env;
+    Ort::SessionOptions sessionOptions;
+    Ort::Session session;
+
+    OrtContext(const wchar_t* modelPath)
+        : env(ORT_LOGGING_LEVEL_WARNING, "YoloCropper"),
+        session(nullptr)
+    {
+        sessionOptions.SetIntraOpNumThreads(4);
+        sessionOptions.SetGraphOptimizationLevel(
+            GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+        session = Ort::Session(env, modelPath, sessionOptions);
+    }
+};
+
+
+// Tests
+void test_loadModel(int model);
+
+
+// Process
+std::vector<float> preprocess(const cv::Mat& letterboxed);
+cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx);
+
+
 
 cv::Mat cropDetection(const cv::Mat& image, const std::vector<Detection>& detections);
-void test_loadModel(int model);
-std::vector<float> preprocess(const cv::Mat& letterboxed);
-cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed);
-std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int origH, int modelW, int modelH, float confThreshold);
-cv::Mat cropDetection(const cv::Mat& image, const std::vector<Detection>& detections);
-void initONNXRuntime();
+
+
+
