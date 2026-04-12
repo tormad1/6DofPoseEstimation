@@ -73,7 +73,7 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtCon
         inputShape.size()         
     );
 
-    // --- Get input/output node names from the model ---
+    // Get input/output node names from the model
     Ort::AllocatorWithDefaultOptions allocator;
 
     auto inputNamePtr = ctx.session.GetInputNameAllocated(0, allocator);
@@ -85,7 +85,7 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtCon
     std::cout << "Input name:  " << inputName << std::endl;
     std::cout << "Output name: " << outputName << std::endl;
 
-    // --- Run ---
+    // Run
     auto outputTensors = ctx.session.Run(
         Ort::RunOptions{ nullptr },
         &inputName,        
@@ -96,7 +96,7 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtCon
     );
 
 
-    // --- Postprocess and crop ---
+    // Postprocess and crop
     std::vector<Detection> detections = postprocess(
         outputTensors[0],
         original.cols,
@@ -147,7 +147,7 @@ std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int orig
             }
         }
 
-        // Skip if below threshold or not a bottle
+        // Skip if below threshold or not a can
         if (bestScore < confThreshold) continue;
         if (bestClass != targetClass)  continue;
 
