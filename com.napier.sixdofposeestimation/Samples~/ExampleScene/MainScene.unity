@@ -129,7 +129,6 @@ GameObject:
   m_Component:
   - component: {fileID: 373557378}
   - component: {fileID: 373557377}
-  - component: {fileID: 373557379}
   m_Layer: 0
   m_Name: PoseManager
   m_TagString: Untagged
@@ -174,22 +173,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &373557379
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 373557376}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a59f28d264654bd48b4cea7fccce5095, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseBridge
-  useDummy: 1
-  croppedFrame: {fileID: 0}
-  intervalFrames: 10
-  poseManager: {fileID: 373557377}
 --- !u!1 &449560824
 GameObject:
   m_ObjectHideFlags: 0
@@ -270,7 +253,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: e03be4bd6b2f2f34b847e52900c072f5, type: 2}
+  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

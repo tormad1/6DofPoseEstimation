@@ -1,0 +1,11 @@
+{
+  "name": "com.napier.sixdofposeestimation",
+  "version": "0.1.0",
+  "displayName": "6DoF Pose Estimation",
+  "description": "A Unity plugin for 6DoF object pose estimation. Provides a C# API that accepts RGB frames and returns object position and rotation in Unity coordinates.",
+  "unity": "6000.0",
+  "type": "library",
+  "author": {
+    "name": "SOC09109 Group Project Team"
+  }
+}
