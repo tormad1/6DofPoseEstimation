@@ -14,7 +14,7 @@ None/
 huggingface/
 tmp/
 .empty/
-gigaPose_datasets/datasets/pretrained/
+gigaPose_datasets/pretrained/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
