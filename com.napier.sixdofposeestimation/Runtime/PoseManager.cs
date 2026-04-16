@@ -39,11 +39,6 @@ public class PoseManager : MonoBehaviour
 
     void Update()
     {
-        if (TryGetHardcodedPose(out PoseData pose))
-        {
-            ProcessIncomingPose(pose);
-        }
-
         // Timeout handling
         if (!TrackingLost &&
             Time.time - lastAcceptTimeUnity > trackingTimeoutSeconds)
@@ -52,17 +47,17 @@ public class PoseManager : MonoBehaviour
         }
     }
 
-    bool TryGetHardcodedPose(out PoseData pose)
+    public void OnPose(PoseBridge.Pose p)
     {
-        pose = new PoseData
+        PoseData pose = new PoseData
         {
-            position = hardcodedPosition,
-            rotation = Quaternion.Euler(hardcodedEulerRotation),
-            confidence = hardcodedConfidence,
-            timestamp = Time.timeAsDouble
+            position = new Vector3(p.px, p.py, p.pz),
+            rotation = new Quaternion(p.qx, p.qy, p.qz, p.qw),
+            confidence = p.confidence,
+            timestamp = p.timestamp_us * 1e-6
         };
 
-        return true;
+        ProcessIncomingPose(pose);
     }
 
     void ProcessIncomingPose(PoseData pose)
