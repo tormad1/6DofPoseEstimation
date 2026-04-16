@@ -3,7 +3,7 @@ model_name: dinov2_vitl14
 
 dinov2_model:
   _target_: torch.hub.load
-  repo_or_dir: /home/tormad/dinov2
+  repo_or_dir: /home/napier6dof/dinov2
   model: ${model.ae_net.model_name}
   source: local
 

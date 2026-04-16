@@ -35,7 +35,7 @@ class AENet(pl.LightningModule):
 
     def reset_with_pretrained_weights(self):
         device = self.device
-        self.dinov2_model = torch.hub.load("/home/tormad/dinov2", self.model_name, source="local")
+        self.dinov2_model = torch.hub.load("/home/napier6dof/dinov2", self.model_name, source="local")
         self.dinov2_model = self.dinov2_model.to(device)
 
     def get_toUpdate_parameters(self):

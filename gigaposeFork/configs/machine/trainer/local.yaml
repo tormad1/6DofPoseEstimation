@@ -1,11 +1,11 @@
 _target_:  pytorch_lightning.Trainer
 max_epochs: 1000
-accelerator: gpu
-devices: [0]
+accelerator: cpu
+devices: 1
 deterministic: False
 detect_anomaly: False
 enable_progress_bar: True
-strategy: ddp # ddp_find_unused_parameters_true
+strategy: single_device # ddp_find_unused_parameters_true
 precision: 32
 
 # accumulate_grad_batches:
