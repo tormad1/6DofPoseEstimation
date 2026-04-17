@@ -1,0 +1,143 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{88C434D3-BBAA-4B99-8DDF-65D313181C56}|GigaPoseBridgeTest\\GigaPoseBridgeTest.vcxproj|D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridgeTest\\GigaPoseBridgeTest.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{88C434D3-BBAA-4B99-8DDF-65D313181C56}|GigaPoseBridgeTest\\GigaPoseBridgeTest.vcxproj|solutionrelative:GigaPoseBridgeTest\\GigaPoseBridgeTest.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\pch.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|solutionrelative:GigaPoseBridge\\pch.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\dllmain.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|solutionrelative:GigaPoseBridge\\dllmain.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\GigaPoseBridge.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|solutionrelative:GigaPoseBridge\\GigaPoseBridge.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\pch.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|solutionrelative:GigaPoseBridge\\pch.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\GigaPoseBridge.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|solutionrelative:GigaPoseBridge\\GigaPoseBridge.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\framework.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{F0B6F66F-ADE4-42FB-A8EF-E3FA6A85E683}|GigaPoseBridge\\GigaPoseBridge.vcxproj|solutionrelative:GigaPoseBridge\\framework.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 4,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "pch.h",
+              "DocumentMoniker": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\pch.h",
+              "RelativeDocumentMoniker": "GigaPoseBridge\\pch.h",
+              "ToolTip": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\pch.h",
+              "RelativeToolTip": "GigaPoseBridge\\pch.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2026-04-17T18:24:18.678Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "framework.h",
+              "DocumentMoniker": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\framework.h",
+              "RelativeDocumentMoniker": "GigaPoseBridge\\framework.h",
+              "ToolTip": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\framework.h",
+              "RelativeToolTip": "GigaPoseBridge\\framework.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2026-04-17T18:23:32.725Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "pch.cpp",
+              "DocumentMoniker": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\pch.cpp",
+              "RelativeDocumentMoniker": "GigaPoseBridge\\pch.cpp",
+              "ToolTip": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\pch.cpp",
+              "RelativeToolTip": "GigaPoseBridge\\pch.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-04-17T18:23:11.741Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "GigaPoseBridgeTest.cpp",
+              "DocumentMoniker": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridgeTest\\GigaPoseBridgeTest.cpp",
+              "RelativeDocumentMoniker": "GigaPoseBridgeTest\\GigaPoseBridgeTest.cpp",
+              "ToolTip": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridgeTest\\GigaPoseBridgeTest.cpp",
+              "RelativeToolTip": "GigaPoseBridgeTest\\GigaPoseBridgeTest.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAoAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-04-17T17:41:02.516Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "GigaPoseBridge.h",
+              "DocumentMoniker": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\GigaPoseBridge.h",
+              "RelativeDocumentMoniker": "GigaPoseBridge\\GigaPoseBridge.h",
+              "ToolTip": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\GigaPoseBridge.h",
+              "RelativeToolTip": "GigaPoseBridge\\GigaPoseBridge.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2026-04-17T17:25:46.393Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "GigaPoseBridge.cpp",
+              "DocumentMoniker": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\GigaPoseBridge.cpp",
+              "RelativeDocumentMoniker": "GigaPoseBridge\\GigaPoseBridge.cpp",
+              "ToolTip": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\GigaPoseBridge.cpp",
+              "RelativeToolTip": "GigaPoseBridge\\GigaPoseBridge.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADwAAAA9AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-04-17T17:25:25.156Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "dllmain.cpp",
+              "DocumentMoniker": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\dllmain.cpp",
+              "RelativeDocumentMoniker": "GigaPoseBridge\\dllmain.cpp",
+              "ToolTip": "D:\\dev\\uni\\6DofPoseEstimation\\GigaPoseBridge\\GigaPoseBridge\\dllmain.cpp",
+              "RelativeToolTip": "GigaPoseBridge\\dllmain.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-04-17T17:10:43.725Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
