@@ -1,86 +1,49 @@
 from __future__ import annotations
 
-# Standard Library
-from dataclasses import dataclass
-from typing import Any, Dict, List, Union
+from typing import List
 
 # Third Party
 from pathlib import Path
 import pandas as pd
 import numpy as np
 import torch
-from tqdm import tqdm
 
 # MegaPose
 import src.megapose.utils.tensor_collection as tc
-from src.megapose.utils.tensor_collection import PandasTensorCollection
 from src.megapose.datasets.scene_dataset import SceneObservation, ObjectData
 from src.custom_megapose.web_scene_dataset import (
     WebSceneDataset,
 )
 from src.custom_megapose.web_scene_dataset import IterableWebSceneDataset
-from src.custom_megapose.template_dataset import TemplateDataset, NearestTemplateFinder
-from src.dataloader.keypoints import KeyPointSampler
-from bop_toolkit_lib import inout
-from src.dataloader.train import GigaPoseTrainSet
+from src.utils.bbox import BoundingBox
 from src.utils.logging import get_logger
-from src.utils.inout import (
-    load_test_list_and_cnos_detections,
-    load_test_list_and_init_locs,
-)
+from src.utils.inout import load_test_list_and_cnos_detections
 from bop_toolkit_lib import pycoco_utils
 from src.utils.dataset import LMO_ID_to_index
-from src.lib3d.numpy import matrix4x4
 
 logger = get_logger(__name__)
-ListBbox = List[int]
-ListPose = List[List[float]]
-SceneObservationTensorCollection = PandasTensorCollection
-
-SingleDataJsonType = Union[str, float, ListPose, int, ListBbox, Any]
-DataJsonType = Union[Dict[str, SingleDataJsonType], List[SingleDataJsonType]]
 
 
-@dataclass
-class GigaPoseTestSet(GigaPoseTrainSet):
+class GigaPoseTestSet:
     def __init__(
         self,
         batch_size,
         root_dir,
         dataset_name,
-        depth_scale,
         template_config,
         transforms,
         test_setting,
-        load_gt=True,
-        init_loc_path=None,  # for refinement
     ):
-        split, model_name = self.get_split_name(dataset_name)
+        split = self.get_split_name(dataset_name)
         self.batch_size = batch_size
         self.root_dir = Path(root_dir)
         self.dataset_name = dataset_name
         self.transforms = transforms
-        if self.transforms.rgb_augmentation:
-            self.transforms.rgb_transform.transform = [
-                transform for transform in self.transforms.rgb_transform.transform
-            ]
 
         # load the dataset
         webdataset_dir = self.root_dir / self.dataset_name
-        web_dataset = WebSceneDataset(webdataset_dir / split, depth_scale=depth_scale, load_depth=False)
+        web_dataset = WebSceneDataset(webdataset_dir / split)
         self.web_dataloader = IterableWebSceneDataset(web_dataset, set_length=True)
-
-        # load the template dataset
-        model_infos = inout.load_json(
-            self.root_dir / self.dataset_name / model_name / "models_info.json"
-        )
-        model_infos = [{"obj_id": int(obj_id)} for obj_id in model_infos.keys()]
-
-        template_config.dir += f"/{dataset_name}"
-        self.template_dataset = TemplateDataset.from_config(
-            model_infos, template_config
-        )
-        self.template_finder = NearestTemplateFinder(template_config)
 
         # depending on setting:
         # 1. localization: load target_objects
@@ -90,13 +53,6 @@ class GigaPoseTestSet(GigaPoseTrainSet):
             "detection",
         ], f"{test_setting} not supported!"
         self.load_detections(test_setting=test_setting)
-        if init_loc_path is not None:
-            self.load_init_loc(init_loc_path, test_setting)
-            logger.info("Loaded init loc for refinement!")
-        self.load_gt = load_gt
-
-        # keypoint sampler
-        self.keypoint_sampler = KeyPointSampler()
 
     def load_detections(self, test_setting):
         if test_setting == "localization":
@@ -110,57 +66,13 @@ class GigaPoseTestSet(GigaPoseTrainSet):
             max_det_per_object_id=max_det_per_object_id,
         )
 
-    def load_init_loc(self, init_loc_path, test_setting, min_score=0.25):
-        (
-            self.test_list,
-            self.init_locs,
-            self.num_hypothesis,
-        ) = load_test_list_and_init_locs(
-            self.root_dir, self.dataset_name, init_loc_path, test_setting
-        )
-        new_init_locs = {}
-        init_number_locs, filtered_number_locs = 0, 0
-        # drop instance_id having low confidence score
-        for image_key in tqdm(self.init_locs, desc="Filtering init locs"):
-            image_locs = self.init_locs[image_key]
-            init_number_locs += len(image_locs)
-            # group by instance_id
-            image_locs_by_instance_id = {}
-            for loc in image_locs:
-                instance_id = loc["instance_id"]
-                if instance_id not in image_locs_by_instance_id:
-                    image_locs_by_instance_id[instance_id] = []
-                image_locs_by_instance_id[instance_id].append(loc)
-
-            new_image_locs = []
-            for instance_id in image_locs_by_instance_id:
-                locs = image_locs_by_instance_id[instance_id]
-                best_score = max([loc["score"] for loc in locs])
-                if best_score < min_score:
-                    continue
-                new_image_locs.extend(locs)
-                filtered_number_locs += len(locs)
-            if len(new_image_locs) == 0:
-                logger.warning(f"Image key {image_key} has no locs!")
-                new_image_locs = image_locs
-            new_init_locs[image_key] = new_image_locs
-        self.init_locs = new_init_locs
-        logger.info(f"Drop from {init_number_locs} to {filtered_number_locs} locs!")
-        if self.num_hypothesis == 1:
-            self.instance_id_counter = 0
-        logger.info(f"Loaded {self.num_hypothesis} init locs!")
-
     def get_split_name(self, dataset_name):
         if dataset_name in ["hb", "tless"]:
             split = "test_primesense"
         else:
             split = "test"
         logger.info(f"Split: {split} for {dataset_name}!")
-        if dataset_name in ["tless"]:
-            model_name = "models_cad"
-        else:
-            model_name = "models"
-        return split, model_name
+        return split
 
     def load_test_list(self, batch: List[SceneObservation]):
         target_lists = []
@@ -244,145 +156,50 @@ class GigaPoseTestSet(GigaPoseTrainSet):
         test_obj_ids = test_list.infos.obj_id
         assert np.allclose(np.unique(labels), np.unique(test_obj_ids))
 
+    def process_real(self, batch):
+        rgb = batch["rgb"] / 255.0
+        detections = batch["gt_detections"]
+        data = batch["gt_data"]
+
+        bboxes = BoundingBox(detections.bboxes, "xywh")
+        idx_selected = np.arange(len(detections.bboxes))
+        bboxes = bboxes.reset(idx_selected)
+
+        batch_im_id = detections[idx_selected].infos.batch_im_id
+        masks = data.masks[idx_selected]
+        K = data.K[idx_selected].float()
+        rgb = rgb[batch_im_id]
+        masked_rgba = torch.cat([rgb * masks[:, None, :, :], masks[:, None, :, :]], dim=1)
+        cropped_data = self.transforms.crop_transform(bboxes.xyxy_box, images=masked_rgba)
+
+        return tc.PandasTensorCollection(
+            K=K,
+            rgb=cropped_data["images"][:, :3],
+            mask=cropped_data["images"][:, -1],
+            M=cropped_data["M"],
+            infos=data[idx_selected].infos,
+        )
+
     def collate_fn(
         self,
         batch: List[SceneObservation],
     ):
-        gt_available = False if self.dataset_name in ["hb", "itodd"] else True
-        load_gt = gt_available and self.load_gt
-
-        # load test list
         test_list = self.load_test_list(batch)
-
-        # add detections for each scene id
-        if not load_gt:
-            batch = self.add_detections(batch)
-
-        # convert to tensor collection
+        batch = self.add_detections(batch)
         batch = SceneObservation.collate_fn(batch)
+        real_data = self.process_real(batch)
 
-        # load real data
-        real_data = self.process_real(batch, test_mode=True)
+        if "lmo" in self.dataset_name:
+            new_labels = real_data.infos.label
+            real_data.infos.label = [str(LMO_ID_to_index[int(label)]) for label in new_labels]
 
-        if load_gt:
-            # load template data
-            template_data, T_real2temp, T_temp2real = self.process_template(real_data)
-
-            # compute keypoints, template is source, real is target
-            keypoints, rel_data = self.process_keypoints(
-                real_data, template_data, T_real2temp, T_temp2real
-            )
-
-            if "lmo" in self.dataset_name:
-                # workaround for indexing LMO: update object id to be in range(8)
-                new_labels = real_data.infos.label
-                new_labels = [str(LMO_ID_to_index[int(label)]) for label in new_labels]
-                real_data.infos.label = new_labels
-
-            out_data = tc.PandasTensorCollection(
-                src_img=self.transforms.normalize(template_data.rgb),
-                src_mask=template_data.mask,
-                src_K=template_data.K,
-                src_M=template_data.M,
-                src_pts=keypoints["src_pts"],
-                tar_img=self.transforms.normalize(real_data.rgb),
-                tar_mask=real_data.mask,
-                tar_K=real_data.K,
-                tar_M=real_data.M,
-                tar_pose=real_data.pose,
-                tar_pts=keypoints["tar_pts"],
-                relScale=rel_data["relScale"],
-                relInplane=rel_data["relInplane"],
-                infos=real_data.infos,
-                test_list=test_list,
-            )
-        else:
-            if "lmo" in self.dataset_name:
-                # workaround for indexing LMO: update object id to be in range(8)
-                new_labels = real_data.infos.label
-                new_labels = [str(LMO_ID_to_index[int(label)]) for label in new_labels]
-                real_data.infos.label = new_labels
-
-            out_data = tc.PandasTensorCollection(
-                tar_img=self.transforms.normalize(real_data.rgb),
-                tar_mask=real_data.mask,
-                tar_K=real_data.K,
-                tar_M=real_data.M,
-                infos=real_data.infos,
-                test_list=test_list,
-            )
-        if not load_gt:
-            self.double_check_test_list(real_data, test_list)
-        return out_data
-
-    def collate_refine_fn(self, batch: List[SceneObservation]):
-        assert len(batch) == 1, "Only support batch size 1 for refinement!"
-        scene_obs = batch[0]
-        rgb = torch.from_numpy(scene_obs.rgb / 255.0)
-        rgb = rgb.permute(2, 0, 1)
-        rgb = rgb.unsqueeze(0)
-        K = torch.from_numpy(scene_obs.camera_data.K)
-        K = K.unsqueeze(0)
-
-        infos = scene_obs.infos
-        scene_id, im_id = int(infos.scene_id), int(infos.view_id)
-        image_key = f"{scene_id:06d}_{im_id:06d}"
-        if image_key not in self.init_locs:
-            logger.warning(f"Image key {image_key} not in init locs!")
-            out_data = tc.PandasTensorCollection(
-                rgb=rgb.float(),
-                K=K.float(),
-                infos=pd.DataFrame(),
-            )
-        else:
-            init_locs = self.init_locs[image_key]
-            names = [
-                "scene_id",
-                "im_id",
-                "obj_id",
-                "instance_id",
-                "score",
-                "TCO_init",
-                "time",
-            ]
-            data = {name: [] for name in names}
-            for idx_loc, loc in enumerate(init_locs):
-                for name in names:
-                    if name == "TCO_init":
-                        R, t = loc["R"], loc["t"]
-                        TCO = matrix4x4(R, t, scale_translation=0.001)
-                        data["TCO_init"].append(TCO)
-                    # add instance_id in case of multiple hypothesis
-                    elif name == "instance_id":
-                        if self.num_hypothesis > 1:
-                            instance_id = loc[name]
-                        else:
-                            instance_id = self.instance_id_counter
-                            self.instance_id_counter += 1
-                        data["instance_id"].append(instance_id)
-                    else:
-                        data[name].append(loc[name])
-            for name in names:
-                data[name] = np.asarray(data[name])
-
-            data["TCO_init"] = torch.from_numpy(data["TCO_init"])
-
-            infos = pd.DataFrame(
-                dict(
-                    scene_id=data["scene_id"],
-                    im_id=data["im_id"],
-                    matching_score=data["score"],
-                    batch_im_id=np.zeros_like(data["instance_id"]).astype(np.int32),
-                    instance_id=data["instance_id"].astype(np.int32),
-                    label=[f"obj_{obj_id:06d}" for obj_id in data["obj_id"]],
-                    time=data["time"],
-                )
-            )
-
-            out_data = tc.PandasTensorCollection(
-                rgb=rgb.float(),
-                K=K.float(),
-                TCO_init=data["TCO_init"].float(),
-                infos=infos,
-            )
+        out_data = tc.PandasTensorCollection(
+            tar_img=self.transforms.normalize(real_data.rgb),
+            tar_mask=real_data.mask,
+            tar_K=real_data.K,
+            tar_M=real_data.M,
+            infos=real_data.infos,
+            test_list=test_list,
+        )
+        self.double_check_test_list(real_data, test_list)
         return out_data

@@ -35,7 +35,6 @@ def run_test(cfg: DictConfig):
 
     cfg.data.test.dataloader.dataset_name = cfg.test_dataset_name
     cfg.data.test.dataloader.batch_size = cfg.machine.batch_size
-    cfg.data.test.dataloader.load_gt = False
     cfg.data.test.dataloader.test_setting = cfg.test_setting
     test_dataset = instantiate(cfg.data.test.dataloader)
     test_dataloader = DataLoader(

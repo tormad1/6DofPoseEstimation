@@ -20,9 +20,6 @@ from __future__ import annotations
 # Standard Library
 import copy
 import json
-import os
-import random
-import time
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -30,13 +27,11 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import numpy as np
 import pandas as pd
 import torch
-import webdataset as wds
 import pinocchio as pin
 
 # MegaPose
 import src.megapose.utils.tensor_collection as tc
 from src.megapose.lib3d.transform import Transform
-from src.megapose.utils.random import make_seed
 from src.megapose.utils.tensor_collection import PandasTensorCollection
 from src.megapose.utils.types import Resolution
 
@@ -197,9 +192,6 @@ class ObservationInfos:
 @dataclass
 class SceneObservation:
     rgb: Optional[np.ndarray] = None  # (h,w,3) uint8 numpy array
-    depth: Optional[np.ndarray] = None  # (h, w), np.float32
-    segmentation: Optional[np.ndarray] = None  # (h, w), np.uint32 (important);
-    # contains objects unique ids. int64 are not handled and can be dangerous when used with PIL
     infos: Optional[ObservationInfos] = None
     object_datas: Optional[List[ObjectData]] = None
     camera_data: Optional[CameraData] = None
@@ -220,7 +212,6 @@ class SceneObservation:
             A dict with fields
                 cameras: PandasTensorCollection
                 rgb: torch.tensor [B,3,H,W] torch.uint8
-                depth: torch.tensor [B,1,H,W]
                 im_infos: List[dict]
                 gt_detections: SceneObservationTensorCollection
                 gt_data: SceneObservationTensorCollection
@@ -237,7 +228,6 @@ class SceneObservation:
         initial_data = []
         batch_im_id = -1
         rgb_images = []
-        depth_images = []
 
         for n, data in enumerate(batch):
             # data is of type SceneObservation
@@ -259,12 +249,6 @@ class SceneObservation:
             # [3,H,W]
             rgb = torch.as_tensor(data.rgb).permute(2, 0, 1).to(torch.uint8)
             rgb_images.append(rgb)
-            if data.depth is not None:
-                depth = np.expand_dims(data.depth, axis=0)
-            else:
-                depth = np.array([])
-
-            depth_images.append(depth)
 
             gt_data_ = data.as_pandas_tensor_collection(object_labels=object_labels)
             gt_data_.infos["batch_im_id"] = batch_im_id  # Add batch_im_id
@@ -295,7 +279,6 @@ class SceneObservation:
         return dict(
             cameras=cameras,
             rgb=torch.stack(rgb_images),  # [B,3,H,W]
-            depth=torch.as_tensor(np.stack(depth_images)),  # [B,1,H,W] or [B,0]
             im_infos=im_infos,
             gt_detections=gt_detections,
             gt_data=gt_data,
@@ -338,12 +321,6 @@ class SceneObservation:
 
             if obs.binary_masks is not None:
                 binary_mask = torch.tensor(obs.binary_masks[obj_data.unique_id]).float()
-                masks.append(binary_mask)
-
-            if obs.segmentation is not None:
-                binary_mask = np.zeros_like(obs.segmentation, dtype=np.bool_)
-                binary_mask[obs.segmentation == obj_data.unique_id] = 1
-                binary_mask = torch.as_tensor(binary_mask).float()
                 masks.append(binary_mask)
 
             if obj_data.TWO_init:
@@ -390,23 +367,15 @@ class SceneDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         frame_index: Optional[pd.DataFrame],
-        load_depth: bool = False,
-        load_segmentation: bool = True,
     ):
         """Scene dataset.
         Can be an IterableDataset or a map-style Dataset.
 
         Args:
             frame_index (pd.DataFrame): Must contain the following columns: scene_id, view_id
-            load_depth (bool, optional): Whether to load depth images. Defaults to False.
-            load_segmentation (bool, optional): Whether to load image segmentation.
-            Defaults to True.
-            Defaults to f'{label}'.
         """
 
         self.frame_index = frame_index
-        self.load_depth = load_depth
-        self.load_segmentation = load_segmentation
 
     def _load_scene_observation(
         self, image_infos: ObservationInfos
@@ -431,62 +400,3 @@ class IterableSceneDataset:
     def __iter__(self) -> Iterator[SceneObservation]:
         """Returns an infinite iterator over SceneObservation samples."""
         raise NotImplementedError
-
-
-class RandomIterableSceneDataset(IterableSceneDataset):
-    """RandomIterableSceneDataset.
-
-    Generates an infinite iterator over SceneObservation by
-    randomly sampling from a SceneDataset.
-    """
-
-    def __init__(
-        self,
-        scene_ds: SceneDataset,
-        deterministic: bool = False,
-    ):
-        self.scene_ds = scene_ds
-        self.deterministic = deterministic
-        self.worker_seed_fn = wds.utils.pytorch_worker_seed
-
-    def __iter__(self) -> Iterator[SceneObservation]:
-        if self.deterministic:
-            seed = make_seed(self.worker_seed_fn())
-        else:
-            seed = make_seed(
-                self.worker_seed_fn(),
-                os.getpid(),
-                time.time_ns(),
-                os.urandom(4),
-            )
-        self.rng = random.Random(seed)
-        while True:
-            idx = self.rng.randint(0, len(self.scene_ds) - 1)
-            yield self.scene_ds[idx]
-
-
-class IterableMultiSceneDataset(IterableSceneDataset):
-    def __init__(
-        self,
-        list_iterable_scene_ds: List[IterableSceneDataset],
-        deterministic: bool = False,
-    ):
-        self.list_iterable_scene_ds = list_iterable_scene_ds
-        self.deterministic = deterministic
-        self.worker_seed_fn = wds.utils.pytorch_worker_seed
-
-    def __iter__(self) -> Iterator[SceneObservation]:
-        if self.deterministic:
-            seed = make_seed(self.worker_seed_fn())
-        else:
-            seed = make_seed(
-                self.worker_seed_fn(),
-                os.getpid(),
-                time.time_ns(),
-                os.urandom(4),
-            )
-        self.rng = random.Random(seed)
-        self.iterators = [iter(ds) for ds in self.list_iterable_scene_ds]
-        while True:
-            idx = self.rng.randint(0, len(self.iterators) - 1)
-            yield next(self.iterators[idx])

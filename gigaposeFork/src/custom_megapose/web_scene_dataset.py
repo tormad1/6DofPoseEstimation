@@ -2,7 +2,6 @@
 import io
 import json
 import tarfile
-from functools import partial
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Union
 
@@ -29,12 +28,8 @@ logger = get_logger(__name__)
 
 def load_scene_ds_obs(
     sample: Dict[str, Union[bytes, str]],
-    depth_scale: float = 1.0,
-    load_depth: bool = False,
-    label_format: str = "{label}",
 ) -> SceneObservation:
     # load rgb
-    depth_format = "depth.png"
     if "rgb.jpg" in sample:
         rgb = np.array(imageio.imread(io.BytesIO(sample["rgb.jpg"])))
     elif "rgb.png" in sample:
@@ -42,7 +37,6 @@ def load_scene_ds_obs(
     elif "gray.tif" in sample:
         rgb = np.array(imageio.imread(io.BytesIO(sample["gray.tif"])))
         rgb = np.stack([rgb, rgb, rgb], axis=-1)
-        depth_format = "depth.tif"
     else:
         raise ValueError("No rgb image found")
 
@@ -50,12 +44,6 @@ def load_scene_ds_obs(
         gt_available = True
     else:
         gt_available = False
-
-    depth = None
-    if load_depth:
-        depth = imageio.imread(io.BytesIO(sample[depth_format]))
-        depth = np.asarray(depth, dtype=np.float32)
-        depth /= depth_scale
 
     camera_data = json.loads(sample["camera.json"])
     if "cam_R_w2c" in camera_data:
@@ -106,7 +94,6 @@ def load_scene_ds_obs(
         masks_visib = {}
     return SceneObservation(
         rgb=rgb,
-        depth=depth,
         infos=infos,
         object_datas=object_datas,
         camera_data=camera_data,
@@ -118,23 +105,12 @@ class WebSceneDataset(SceneDataset):
     def __init__(
         self,
         wds_dir: Path,
-        depth_scale: float = 1000.0,
-        load_depth: bool = True,
-        load_segmentation: bool = True,
-        label_format: str = "{label}",
-        load_frame_index: bool = False,
     ):
-        self.depth_scale = depth_scale
-        self.label_format = label_format
         self.wds_dir = wds_dir
 
         frame_index = self.load_frame_index()
 
-        super().__init__(
-            frame_index=frame_index,
-            load_depth=load_depth,
-            load_segmentation=load_segmentation,
-        )
+        super().__init__(frame_index=frame_index)
 
     def load_frame_index(self) -> pd.DataFrame:
         if "test" in self.wds_dir.name:
@@ -170,8 +146,6 @@ class WebSceneDataset(SceneDataset):
         sample: Dict[str, Union[bytes, str]] = dict()
         for k in (
             "rgb.png",
-            "segmentation.png",
-            "depth.png",
             "infos.json",
             "object_datas.json",
             "camera_data.json",
@@ -180,7 +154,7 @@ class WebSceneDataset(SceneDataset):
             assert tar_file is not None
             sample[k] = tar_file.read()
 
-        obs = load_scene_ds_obs(sample, load_depth=self.load_depth)
+        obs = load_scene_ds_obs(sample)
         tar.close()
         return obs
 
@@ -191,18 +165,11 @@ class IterableWebSceneDataset(IterableSceneDataset):
     ):
         self.web_scene_dataset = web_scene_dataset
 
-        load_scene_ds_obs_ = partial(
-            load_scene_ds_obs,
-            depth_scale=self.web_scene_dataset.depth_scale,
-            load_depth=self.web_scene_dataset.load_depth,
-            label_format=self.web_scene_dataset.label_format,
-        )
-
         def load_scene_ds_obs_iterator(
             samples: Iterator[SceneObservation],
         ) -> Iterator[SceneObservation]:
             for sample in samples:
-                yield load_scene_ds_obs_(sample)
+                yield load_scene_ds_obs(sample)
 
         self.datapipeline = wds.DataPipeline(
             wds.SimpleShardList(

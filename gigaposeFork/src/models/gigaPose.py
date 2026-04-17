@@ -2,22 +2,12 @@ import os
 import os.path as osp
 import numpy as np
 import torch
-import torch.nn.functional as F
-from torch import nn
-from einops import repeat
 import pytorch_lightning as pl
 from tqdm import tqdm
 import pandas as pd
 from src.utils.logging import get_logger
-from src.utils.batch import BatchedData, gather
-from src.utils.optimizer import HybridOptim
+from src.utils.batch import BatchedData
 from src.utils.time import Timer
-from src.models.loss import cosine_similarity
-from src.lib3d.torch import (
-    cosSin,
-    get_relative_scale_inplane,
-    geodesic_distance,
-)
 from src.models.poses import ObjectPoseRecovery
 import src.megapose.utils.tensor_collection as tc
 from src.utils.inout import save_predictions_from_batched_predictions
@@ -31,9 +21,7 @@ class GigaPose(pl.LightningModule):
         model_name,
         ae_net,
         ist_net,
-        training_loss,
         testing_metric,
-        optim_config,
         log_interval,
         log_dir,
         max_num_dets_per_forward=None,
@@ -45,7 +33,6 @@ class GigaPose(pl.LightningModule):
         self.model_name = model_name
         self.ae_net = ae_net
         self.ist_net = ist_net
-        self.training_loss = training_loss
         self.testing_metric = testing_metric
 
         self.max_num_dets_per_forward = max_num_dets_per_forward
@@ -56,278 +43,15 @@ class GigaPose(pl.LightningModule):
         os.makedirs(self.log_dir, exist_ok=True)
         os.makedirs(osp.join(self.log_dir, "predictions"), exist_ok=True)
 
-        self.optim_config = optim_config
-        self.optim_name = "AdamW"
-
         # for testing
         self.template_datas = {}
         self.pose_recovery = {}
-        self.l2_loss = nn.MSELoss()
         self.timer = Timer()
         self.run_id = None
         self.template_datasets = None
         self.test_dataset_name = None
 
         logger.info("Initialize GigaPose done!")
-
-    def warm_up_lr(self):
-        for optim in self.trainer.optimizers:
-            for idx_group, pg in enumerate(optim.param_groups):
-                if len(optim.param_groups) > 1:
-                    lr = self.lr["ae"] if idx_group == 0 else self.lr["ist"]
-                    pg["lr"] = (
-                        self.global_step / float(self.optim_config.warm_up_steps) * lr
-                    )
-                else:
-                    pg["lr"] = (
-                        self.global_step
-                        / float(self.optim_config.warm_up_steps)
-                        * self.lr
-                    )
-            if self.global_step % 50 == 0:
-                logger.info(f"Step={self.global_step}, lr warm up: lr={pg['lr']}")
-
-    def configure_optimizers(self):
-        # define optimizer
-        if self.optim_config.nets_to_train in ["ae", "all"]:
-            logger.info("Optimizer for ae net")
-            ae_optimizer = torch.optim.AdamW(
-                self.ae_net.get_toUpdate_parameters(),
-                self.optim_config.ae_lr,
-                weight_decay=self.optim_config.weight_decay,
-            )
-            self.lr = self.optim_config.ae_lr
-
-        if self.optim_config.nets_to_train in ["ist", "all"]:
-            logger.info("Optimizer for ist net")
-            ist_optimizer = torch.optim.AdamW(
-                self.ist_net.parameters(),
-                self.optim_config.ist_lr,
-                weight_decay=self.optim_config.weight_decay,
-            )
-            self.lr = self.optim_config.ist_lr
-
-        # disable gradient for non-updatable parameters
-        if self.optim_config.nets_to_train != "all":
-            if self.optim_config.nets_to_train == "ae":
-                for param in self.ist_net.parameters():
-                    param.requires_grad = False
-            if self.optim_config.nets_to_train == "ist":
-                for param in self.ae_net.parameters():
-                    param.requires_grad = False
-        else:
-            self.lr = {
-                "ae": self.optim_config.ae_lr,
-                "ist": self.optim_config.ist_lr,
-            }
-        # combine optimizers
-        if self.optim_config.nets_to_train == "all":
-            optimizer = HybridOptim([ae_optimizer, ist_optimizer])
-        elif self.optim_config.nets_to_train == "ae":
-            optimizer = ae_optimizer
-        elif self.optim_config.nets_to_train == "ist":
-            optimizer = ist_optimizer
-        else:
-            raise NotImplementedError
-        assert optimizer is not None
-        return optimizer
-
-    def move_to_device(self):
-        self.ae_net.to(self.device)
-        self.ist_net.to(self.device)
-        logger.info(f"Moving models to {self.device} done!")
-
-    def compute_contrastive_loss(self, batch, split):
-        """
-        Contrastive loss based on corresponding patches
-        - Positive are patches from the same correspondence
-        - Negative are patches from different correspondences
-        """
-        device = batch.src_img.device
-        # get the query and ref features
-        src_feat = self.ae_net(batch.src_img)
-        tar_feat = self.ae_net(batch.tar_img)
-        src_pts = getattr(batch, "src_pts").clone().long()
-        tar_pts = getattr(batch, "tar_pts").clone().long()
-
-        loss = {}
-        # select the corresponding patches
-        src_feat_ = gather(src_feat, src_pts)
-        tar_feat_ = gather(tar_feat, tar_pts)
-        label = torch.arange(src_feat_.shape[0], dtype=torch.long).to(device)
-        loss["infoNCE"] = self.training_loss.contrast_loss(
-            src_feat_,
-            tar_feat_,
-            label,
-        )
-
-        # monitor the similarity between query and ref
-        with torch.no_grad():
-            pos_sim = F.cosine_similarity(src_feat_, tar_feat_, dim=1, eps=1e-8)
-            loss["pos_sim"] = pos_sim.mean()
-
-            neg_sim = cosine_similarity(src_feat_, tar_feat_, normalize=True)
-            loss["neg_sim"] = neg_sim.mean()
-
-        for metric_name, metric_value in loss.items():
-            name = f"{split}/{metric_name}"
-            if metric_name == "infoNCE":
-                prog_bar = True
-            else:
-                prog_bar = False
-            self.log(
-                name,
-                metric_value,
-                sync_dist=True,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=prog_bar,
-            )
-        return loss
-
-    def compute_regression_loss(self, batch, split):
-        """
-        Contrastive loss based on corresponding patches
-        - Positive are patches from the same correspondence
-        - Negative are patches from different correspondences
-        """
-        # get the query and ref features
-        num_patches = batch.src_pts.shape[1]
-        H, W = np.sqrt(num_patches).astype(int), np.sqrt(num_patches).astype(int)
-
-        loss = {}
-        gt_relInplane = getattr(batch, "relInplane")
-        gt_relScale = getattr(batch, "relScale")
-
-        src_pts = getattr(batch, "src_pts").clone().long()
-        tar_pts = getattr(batch, "tar_pts").clone().long()
-
-        preds = self.ist_net(
-            src_img=batch.src_img,
-            tar_img=batch.tar_img,
-            src_pts=src_pts,
-            tar_pts=tar_pts,
-        )
-        if preds["inplane"].shape[0] != src_pts.shape[0]:
-            gt_relInplane = repeat(gt_relInplane, "b -> b 1 H W", H=H, W=W)
-            gt_relInplane = gather(gt_relInplane, src_pts).squeeze(1)
-
-            gt_relScale = repeat(gt_relScale, "b -> b 1 H W", H=H, W=W)
-            gt_relScale = gather(gt_relScale, src_pts).squeeze(1)
-
-        # it is simpler to use l2 loss for warm up to regress correct magnitudes
-        if self.trainer.global_step < self.optim_config.warm_up_steps:
-            loss["inp"] = self.l2_loss(
-                preds["inplane"],
-                cosSin(gt_relInplane),
-            )
-            loss["scale"] = self.l2_loss(preds["scale"], gt_relScale)
-        else:
-            loss["inp"] = self.training_loss.inplane_loss(
-                preds["inplane"],
-                cosSin(gt_relInplane),
-            )
-            loss["scale"] = self.training_loss.scale_loss(preds["scale"], gt_relScale)
-
-        # Visualize the predicted inplane and scale
-        with torch.no_grad():
-            scale_err = torch.abs(preds["scale"].clone() - gt_relScale)
-            loss["scale_err"] = scale_err.mean()
-
-            angle_err = geodesic_distance(preds["inplane"], cosSin(gt_relInplane))
-            loss["angle_err"] = torch.rad2deg(angle_err)
-
-        for metric_name, metric_value in loss.items():
-            name = f"{split}/{metric_name}"
-            if metric_name in ["inp", "scale"]:
-                prog_bar = True
-            else:
-                prog_bar = False
-            self.log(
-                name,
-                metric_value,
-                sync_dist=True,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=prog_bar,
-            )
-        return loss
-
-    def training_step(self, batchs, idx_batch):
-        if self.trainer.global_step < self.optim_config.warm_up_steps:
-            self.warm_up_lr()
-        elif self.trainer.global_step == self.optim_config.warm_up_steps:
-            logger.info(f"Finished warm up, setting lr to {self.lr}")
-
-        loss = 0
-        times = {}
-
-        for idx_dataset, batch in enumerate(batchs):
-            if batch is None:
-                continue
-
-            if self.optim_config.nets_to_train in ["ist", "all"]:
-                self.timer.tic()
-                loss_ = self.compute_regression_loss(batch, "train")
-                loss += loss_["scale"] + loss_["inp"]
-                times[f"scale_inp_{idx_dataset}"] = self.timer.toc()
-
-            if self.optim_config.nets_to_train in ["ae", "all"]:
-                self.timer.tic()
-                loss_ = self.compute_contrastive_loss(batch, "train")
-                loss += loss_["infoNCE"]
-                times[f"infoNCE_{idx_dataset}"] = self.timer.toc()
-
-        for time_name, time_value in times.items():
-            self.log(
-                time_name,
-                time_value,
-                sync_dist=True,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=False,
-            )
-
-        self.log(
-            "total",
-            loss,
-            sync_dist=True,
-            on_step=True,
-            on_epoch=False,
-            prog_bar=True,
-        )
-        return loss
-
-    def validate_contrast_loss(self, batch, idx_batch, split):
-        src_feat = self.ae_net(batch.src_img)
-        tar_feat = self.ae_net(batch.tar_img)
-
-        preds = self.testing_metric.val(
-            src_feat=src_feat,
-            tar_feat=tar_feat,
-            src_mask=batch.src_mask,
-            tar_mask=batch.tar_mask,
-        )
-        setattr(batch, "pred_src_pts", preds.src_pts)
-        setattr(batch, "pred_tar_pts", preds.tar_pts)
-
-        # monitor the distance between the gt and the predicted matches for same target patches
-        mask = torch.logical_and(
-            batch.tar_pts[:, :, 1] != -1, batch.pred_tar_pts[:, :, 1] != -1
-        )
-        distance = (batch.tar_pts[mask] - batch.pred_tar_pts[mask]).norm(dim=1).mean()
-        self.log(
-            f"{split}/matching",
-            distance,
-            sync_dist=True,
-            on_step=True,
-            on_epoch=False,
-            prog_bar=True,
-        )
-
-    def validation_step(self, batch, idx_batch):
-        _ = self.compute_regression_loss(batch, "val")
-        _ = self.validate_contrast_loss(batch, idx_batch, "val")
 
     def set_template_data(self, dataset_name):
         logger.info("Initializing template data ...")
@@ -580,5 +304,4 @@ class GigaPose(pl.LightningModule):
                 dataset_name=self.test_dataset_name,
                 model_name=self.model_name,
                 run_id=self.run_id,
-                is_refined=False,
             )

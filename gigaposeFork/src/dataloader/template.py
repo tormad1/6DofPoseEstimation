@@ -6,7 +6,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 from bop_toolkit_lib import inout
 from src.utils.dataset import LMO_index_to_ID
-from src.custom_megapose.template_dataset import TemplateDataset, NearestTemplateFinder
+from src.custom_megapose.template_dataset import TemplateDataset
 import torch
 import src.megapose.utils.tensor_collection as tc
 
@@ -37,7 +37,6 @@ class TemplateSet(Dataset):
         self.template_dataset = TemplateDataset.from_config(
             self.model_infos, template_config
         )
-        self.template_finder = NearestTemplateFinder(template_config)
 
     def get_cad_name(self, dataset_name):
         if dataset_name in ["tless"]:

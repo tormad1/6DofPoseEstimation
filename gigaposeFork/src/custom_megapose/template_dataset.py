@@ -8,16 +8,9 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-
 # MegaPose
 from src.megapose.utils.tensor_collection import PandasTensorCollection
 from src.custom_megapose.transform import Transform, ScaleTransform
-from src.lib3d.numpy import R_opencv2R_opengl
-from src.lib3d.template_transform import (
-    get_obj_poses_from_template_level,
-    compute_inplane,
-)
-from src.utils.inout import combine
 from src.utils.pil import open_image
 from src.utils.logging import get_logger
 
@@ -53,19 +46,8 @@ class TemplateData:
         )
         return data
 
-    def sample_negative_view_ids(self, idx_positive, num_samples):
-        avail_idx = np.arange(0, self.num_templates).tolist()
-        avail_idx.remove(idx_positive)
-        sampled_idx_negatives = np.random.choice(
-            avail_idx,
-            num_samples,
-            replace=False,
-        )
-        return sampled_idx_negatives
-
-    def load_template(self, view_id, inplane=None, load_depth=True):
+    def load_template(self, view_id, inplane=None):
         image_path = f"{self.template_dir}/{view_id:06d}.png"
-        depth_path = f"{self.template_dir}/{view_id:06d}_depth.png"
         assert os.path.exists(image_path), f"{image_path} does not exist"
         rgba = open_image(image_path, inplane)
         box = rgba.getbbox()
@@ -76,14 +58,10 @@ class TemplateData:
                 f"Template {image_path} has zero area, setting to null template"
             )
         data = {"rgba": np.array(rgba), "box": np.array(box)}
-        if load_depth:
-            assert os.path.exists(depth_path), f"{depth_path} does not exist"
-            depth = open_image(depth_path, inplane)
-            data["depth"] = np.array(depth)
         return data
 
     def load_set_of_templates(
-        self, view_ids, reload=False, inplanes=None, reset=True, load_depth=True
+        self, view_ids, reload=False, inplanes=None, reset=True
     ):
         if inplanes is None:
             inplanes = [None for _ in view_ids]
@@ -95,35 +73,22 @@ class TemplateData:
             data = np.load(preprocessed_file)
             rgba = torch.from_numpy(data["rgba"]).float()
             box = torch.from_numpy(data["box"]).long()
-            output = {"rgba": rgba, "box": box}
-            if load_depth:
-                output["depth"] = torch.from_numpy(data["depth"]).float()
-            return output
+            return {"rgba": rgba, "box": box}
         else:
             os.makedirs(f"{root_dir}/preprocessed", exist_ok=True)
             data = {"rgba": [], "box": []}
-            if load_depth:
-                data["depth"] = []
             for view_id, inplane in zip(view_ids, inplanes):
-                view_data = self.load_template(
-                    view_id, inplane=inplane, load_depth=load_depth
-                )
+                view_data = self.load_template(view_id, inplane=inplane)
                 rgba = torch.from_numpy(view_data["rgba"] / 255).float()
                 box = torch.from_numpy(view_data["box"]).long()
                 data["rgba"].append(rgba)
-                if load_depth:
-                    depth = torch.from_numpy(np.float32(view_data["depth"])).float()
-                    data["depth"].append(depth)
                 data["box"].append(box)
             data["rgba"] = torch.stack(data["rgba"]).permute(0, 3, 1, 2)
-            if load_depth:
-                data["depth"] = torch.stack(data["depth"]).unsqueeze(1)
             data["box"] = torch.stack(data["box"])
-            if reload and load_depth:
+            if reload:
                 np.savez(
                     preprocessed_file,
                     rgba=data["rgba"].numpy(),
-                    depth=data["depth"].numpy(),
                     box=data["box"].numpy(),
                 )
                 logger.info(f"Preprocessed {preprocessed_file}")
@@ -133,65 +98,17 @@ class TemplateData:
         data["rgba"], data["M"] = transform(
             images=data["rgba"], boxes=data["box"], return_transform=True
         )
-        if "depth" in data:
-            data["depth"] = transform(images=data["depth"], boxes=data["box"])
         return data
 
-    def load_pose(self, view_ids=None, inplanes=[0]):
+    def load_pose(self):
         poses = np.load(self.pose_path)
-        if view_ids is None:  # all poses for testing mode
-            poses = [Transform(poses[i]) * self.TWO_init for i in range(len(poses))]
-            return torch.stack([pose.toTensor() for pose in poses])
-        else:  # only load poses for training mode
-            inplane_transforms = [Transform.from_inplane(inp) for inp in inplanes]
-            poses = [
-                inplane_transforms[i] * Transform(poses[view_ids[i]]) * self.TWO_init
-                for i in range(len(view_ids))
-            ]
-            return poses
-
-    def read_train_mode(
-        self,
-        transform,
-        object_info,
-        num_negatives=0,
-    ) -> SceneObservationTensorCollection:
-        # positive template
-        positive = self.load_set_of_templates(
-            [object_info["view_id"]],
-            inplanes=[object_info["inplane"]],
-            reload=False,
-        )
-        positive["full_rgba"] = positive["rgba"].clone()
-        if transform is not None:
-            positive = self.apply_transform(transform, positive)
-        for name in positive.keys():
-            positive[name] = positive[name][0]
-        positive["pose"] = self.load_pose([object_info["view_id"]], inplanes=[0])[0]
-
-        # negative templates
-        if num_negatives > 0:
-            # sample negative templates
-            idx_negatives = self.sample_negative_view_ids(
-                idx_positive=object_info["view_id"], num_samples=num_negatives
-            )
-            inplanes = np.random.uniform(0, 360, num_negatives)
-            negatives = self.load_set_of_templates(
-                idx_negatives, inplanes=inplanes, reload=False
-            )
-            if transform is not None:
-                negatives = self.apply_transform(transform, negatives)
-            negatives["pose"] = self.load_pose(idx_negatives, inplanes=inplanes)
-            return combine([{"pos": positive}, {"neg": negatives}])
-        else:
-            return combine([{"pos": positive}])
+        poses = [Transform(poses[i]) * self.TWO_init for i in range(len(poses))]
+        return torch.stack([pose.toTensor() for pose in poses])
 
     def read_test_mode(
         self,
     ):
-        data = self.load_set_of_templates(
-            view_ids=np.arange(0, self.num_templates), load_depth=False
-        )
+        data = self.load_set_of_templates(view_ids=np.arange(0, self.num_templates))
         poses = self.load_pose()
         return data, poses
 
@@ -256,39 +173,3 @@ class TemplateDataset:
             template_datas.append(template_data)
         logger.info(f"Loaded {len(template_datas)} template datas")
         return TemplateDataset(template_datas)
-
-
-class NearestTemplateFinder(object):
-    def __init__(
-        self,
-        config,
-    ):
-        self.level_templates = config.level_templates
-        self.pose_distribution = config.pose_distribution
-        self.avail_index, self.template_poses = get_obj_poses_from_template_level(
-            config.level_templates,
-            config.pose_distribution,
-            return_cam=False,
-            return_index=True,
-        )
-
-        # we use the location to find for nearest template on the sphere
-        template_openGL_poses = R_opencv2R_opengl(self.template_poses[:, :3, :3])
-        self.obj_template_openGL_locations = template_openGL_poses[:, 2, :3]  # Nx3
-
-    def search_nearest_template(self, object_rot):
-        # convert query pose to OpenGL coordinate
-        query_opencv_query_R = object_rot
-        query_opengl_R = R_opencv2R_opengl(query_opencv_query_R)
-        query_opengl_location = query_opengl_R[2, :3]  # Mx3
-
-        # find the nearest template
-        distances = np.linalg.norm(
-            query_opengl_location - self.obj_template_openGL_locations, axis=1
-        )
-        view_id = np.argmin(distances)
-        nearest_pose = self.template_poses[view_id]
-        rot_query_openCV = query_opencv_query_R[:3, :3]
-        rot_template_openCV = nearest_pose[:3, :3]
-        inplane = compute_inplane(rot_query_openCV, rot_template_openCV)
-        return {"view_id": view_id, "inplane": inplane}
