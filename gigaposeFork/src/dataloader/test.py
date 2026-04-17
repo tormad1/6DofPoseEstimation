@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import List
 
 # Third Party
@@ -7,21 +8,85 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import torch
+from PIL import Image
+from pycocotools import mask as coco_mask
+from torch.utils.data import Dataset
 
 # MegaPose
-import src.megapose.utils.tensor_collection as tc
-from src.megapose.datasets.scene_dataset import SceneObservation, ObjectData
-from src.custom_megapose.web_scene_dataset import (
-    WebSceneDataset,
+import src.utils.tensor_collection as tc
+from src.custom_megapose.transform import Transform
+from src.dataloader.scene import (
+    CameraData,
+    ObjectData,
+    ObservationInfos,
+    SceneObservation,
 )
-from src.custom_megapose.web_scene_dataset import IterableWebSceneDataset
 from src.utils.bbox import BoundingBox
 from src.utils.logging import get_logger
 from src.utils.inout import load_test_list_and_cnos_detections
-from bop_toolkit_lib import pycoco_utils
 from src.utils.dataset import LMO_ID_to_index
 
 logger = get_logger(__name__)
+
+
+class BOPSceneDataset(Dataset):
+    def __init__(self, root_dir: Path, dataset_name: str, image_keys: List[str]):
+        self.root_dir = Path(root_dir)
+        self.dataset_name = dataset_name
+        self.scene_root = self.root_dir / self.dataset_name / "test_scenewise"
+        self.image_keys = sorted(image_keys, key=_image_key_sort_key)
+        self._camera_cache = {}
+
+        if not self.scene_root.exists():
+            raise FileNotFoundError(f"Missing scene directory: {self.scene_root}")
+
+    def __len__(self):
+        return len(self.image_keys)
+
+    def __getitem__(self, index):
+        image_key = self.image_keys[index]
+        scene_id, im_id = [int(part) for part in image_key.split("_")]
+        scene_dir = self.scene_root / f"{scene_id:06d}"
+
+        rgb_path = self._find_rgb_path(scene_dir, im_id)
+        rgb = np.array(Image.open(rgb_path).convert("RGB"))
+
+        camera = self._load_camera(scene_dir, im_id)
+        if "cam_R_w2c" in camera:
+            R = np.asarray(camera["cam_R_w2c"], dtype=np.float32).reshape(3, 3)
+            t = np.asarray(camera["cam_t_w2c"], dtype=np.float32).reshape(3)
+        else:
+            R = np.eye(3, dtype=np.float32)
+            t = np.zeros(3, dtype=np.float32)
+
+        return SceneObservation(
+            rgb=rgb,
+            infos=ObservationInfos(scene_id=str(scene_id), view_id=str(im_id)),
+            object_datas=[],
+            camera_data=CameraData(
+                K=np.asarray(camera["cam_K"], dtype=np.float32).reshape(3, 3),
+                TWC=Transform(R, t),
+                resolution=rgb.shape[:2],
+            ),
+            binary_masks={},
+        )
+
+    def _load_camera(self, scene_dir: Path, im_id: int):
+        scene_id = scene_dir.name
+        if scene_id not in self._camera_cache:
+            camera_path = scene_dir / "scene_camera.json"
+            self._camera_cache[scene_id] = json.loads(camera_path.read_text())
+
+        cameras = self._camera_cache[scene_id]
+        return cameras.get(str(im_id)) or cameras[f"{im_id:06d}"]
+
+    def _find_rgb_path(self, scene_dir: Path, im_id: int) -> Path:
+        for image_dir in ("rgb", "gray"):
+            for suffix in (".png", ".jpg", ".jpeg", ".tif", ".tiff"):
+                path = scene_dir / image_dir / f"{im_id:06d}{suffix}"
+                if path.exists():
+                    return path
+        raise FileNotFoundError(f"Missing RGB image for scene={scene_dir.name} im={im_id}")
 
 
 class GigaPoseTestSet:
@@ -34,16 +99,10 @@ class GigaPoseTestSet:
         transforms,
         test_setting,
     ):
-        split = self.get_split_name(dataset_name)
         self.batch_size = batch_size
         self.root_dir = Path(root_dir)
         self.dataset_name = dataset_name
         self.transforms = transforms
-
-        # load the dataset
-        webdataset_dir = self.root_dir / self.dataset_name
-        web_dataset = WebSceneDataset(webdataset_dir / split)
-        self.web_dataloader = IterableWebSceneDataset(web_dataset, set_length=True)
 
         # depending on setting:
         # 1. localization: load target_objects
@@ -53,6 +112,11 @@ class GigaPoseTestSet:
             "detection",
         ], f"{test_setting} not supported!"
         self.load_detections(test_setting=test_setting)
+        self.scene_dataset = BOPSceneDataset(
+            root_dir=self.root_dir,
+            dataset_name=self.dataset_name,
+            image_keys=list(self.test_list.keys()),
+        )
 
     def load_detections(self, test_setting):
         if test_setting == "localization":
@@ -65,14 +129,6 @@ class GigaPoseTestSet:
             test_setting,
             max_det_per_object_id=max_det_per_object_id,
         )
-
-    def get_split_name(self, dataset_name):
-        if dataset_name in ["hb", "tless"]:
-            split = "test_primesense"
-        else:
-            split = "test"
-        logger.info(f"Split: {split} for {dataset_name}!")
-        return split
 
     def load_test_list(self, batch: List[SceneObservation]):
         target_lists = []
@@ -118,13 +174,6 @@ class GigaPoseTestSet:
             scene_id, im_id = int(infos.scene_id), int(infos.view_id)
             image_key = f"{scene_id:06d}_{im_id:06d}"
             dets = self.cnos_dets[image_key]
-            if len(scene_obs.object_datas) == 0:
-                gt_available = False
-            else:
-                gt_available = True
-                gt_mapping = {
-                    obj_data.label: obj_data for obj_data in scene_obs.object_datas
-                }
             object_datas = []
             binary_masks = {}
             for idx, det in enumerate(dets):
@@ -135,17 +184,12 @@ class GigaPoseTestSet:
                 data["bbox_amodal"] = det["bbox"]
                 data["label"] = str(det["category_id"])
                 data["unique_id"] = f"{idx+1}"
-
-                if gt_available and data["label"] in gt_mapping:
-                    obj_data = gt_mapping[data["label"]]
-                    data["TWO"] = obj_data.TWO._T
-                else:
-                    data["TWO"] = [[1, 0, 0, 0], [0, 0, 0]]
+                data["TWO"] = [[0, 0, 0, 1], [0, 0, 0]]
                 object_data = ObjectData.from_json(data)
                 object_datas.append(object_data)
 
                 # load mask
-                binary_mask = pycoco_utils.rle_to_binary_mask(det["segmentation"])
+                binary_mask = decode_binary_mask(det["segmentation"])
                 binary_masks[object_data.unique_id] = binary_mask
             scene_obs.object_datas = object_datas
             scene_obs.binary_masks = binary_masks
@@ -203,3 +247,15 @@ class GigaPoseTestSet:
         )
         self.double_check_test_list(real_data, test_list)
         return out_data
+
+
+def decode_binary_mask(segmentation):
+    rle = dict(segmentation)
+    if isinstance(rle.get("counts"), str):
+        rle["counts"] = rle["counts"].encode("ascii")
+    return coco_mask.decode(rle).astype(bool)
+
+
+def _image_key_sort_key(image_key):
+    scene_id, im_id = image_key.split("_")
+    return int(scene_id), int(im_id)

@@ -1,9 +1,9 @@
 import torch
 from einops import rearrange, repeat
-from megapose.utils.logging import get_logger
+from src.utils.logging import get_logger
 from src.lib3d.torch import inverse_affine, normalize_affine_transform
 from src.models.ransac import RANSAC
-import src.megapose.utils.tensor_collection as tc
+import src.utils.tensor_collection as tc
 import pandas as pd
 
 logger = get_logger(__name__)

@@ -4,11 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 import pandas as pd
 from torch.utils.data import Dataset
-from bop_toolkit_lib import inout
 from src.utils.dataset import LMO_index_to_ID
+from src.utils.inout import load_json
 from src.custom_megapose.template_dataset import TemplateDataset
 import torch
-import src.megapose.utils.tensor_collection as tc
+import src.utils.tensor_collection as tc
 
 
 class TemplateSet(Dataset):
@@ -28,12 +28,10 @@ class TemplateSet(Dataset):
         cad_name = self.get_cad_name(dataset_name)
 
         # load the template dataset
-        model_infos = inout.load_json(
-            self.root_dir / self.dataset_name / cad_name / "models_info.json"
-        )
+        model_infos = load_json(self.root_dir / self.dataset_name / cad_name / "models_info.json")
         self.model_infos = [{"obj_id": int(obj_id)} for obj_id in model_infos.keys()]
 
-        template_config.dir += f"/{dataset_name}"
+        template_config.dir = str(Path(template_config.dir) / dataset_name)
         self.template_dataset = TemplateDataset.from_config(
             self.model_infos, template_config
         )

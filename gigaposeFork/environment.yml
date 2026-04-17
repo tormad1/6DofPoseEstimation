@@ -4,12 +4,12 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - pip<24.1
-  - python=3.9.6
-  - pinocchio=2.6.20
+  - python=3.9
+  - pip
   - pip:
     - torch
     - torchvision
+    - numpy
     - omegaconf
     - torchmetrics==0.10.3
     - fvcore
@@ -19,8 +19,6 @@ dependencies:
     - hydra-core
     - pytorch-lightning==1.8.3
     - pandas
-    - webdataset
-    - imageio
     - einops
     - pillow
     - tqdm

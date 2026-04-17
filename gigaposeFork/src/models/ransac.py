@@ -1,7 +1,7 @@
 import torch
 from src.lib3d.torch import affine_torch, apply_affine
 from src.utils.logging import get_logger
-from src.megapose.utils.tensor_collection import PandasTensorCollection
+from src.utils.tensor_collection import PandasTensorCollection
 
 logger = get_logger(__name__)
 

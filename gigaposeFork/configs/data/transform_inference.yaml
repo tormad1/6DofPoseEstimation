@@ -10,8 +10,3 @@ normalize:
 crop_transform:
   _target_: src.utils.crop.CropResizePad
   target_size: 224
-
-# inference does not use training-time image augmentation or depth augmentation
-crop_augmentation: false
-inplane_augmentation: false
-rgb_augmentation: false

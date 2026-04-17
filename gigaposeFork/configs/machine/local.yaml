@@ -2,7 +2,7 @@ name: local
 
 # specific attributes to this machine
 batch_size: 12
-num_workers: 10
+num_workers: 0
 
 
 # Define trainer, datasets

@@ -1,10 +1,10 @@
 import copy
+import json
 import os
 import os.path as osp
 from pathlib import Path
 
 import numpy as np
-from bop_toolkit_lib import inout
 from tqdm import tqdm
 
 from src.utils.dataset import LMO_index_to_ID
@@ -61,6 +61,10 @@ def save_bop_results(path, results, additional_name=None):
 
     with open(path, "w") as f:
         f.write("\n".join(lines))
+
+
+def load_json(path):
+    return json.loads(Path(path).read_text())
 
 
 def calculate_runtime_per_image(results):
@@ -180,8 +184,7 @@ def save_predictions_from_batched_predictions(
 def generate_test_list(all_detections):
     all_target_list = {}
     for im_key, im_dets in all_detections.items():
-        im_id, scene_id = im_key.split("_")
-        im_id, scene_id = int(im_id), int(scene_id)
+        scene_id, im_id = [int(part) for part in im_key.split("_")]
         im_target = {}
         for det in im_dets:
             if "category_id" in det:
@@ -218,12 +221,10 @@ def load_test_list_and_cnos_detections(
             f"Dataset {dataset_name} is not supported with default detections"
         )
 
-    cnos_dets_dir = (
-        root_dir / "default_detections" / f"core{year}_model_based_unseen/" / det_model
-    )
+    cnos_dets_dir = root_dir / "default_detections" / f"core{year}_model_based_unseen" / det_model
     avail_det_files = os.listdir(cnos_dets_dir)
     cnos_dets_path = [file for file in avail_det_files if dataset_name in file][0]
-    all_cnos_dets = inout.load_json(os.path.join(cnos_dets_dir, cnos_dets_path))
+    all_cnos_dets = load_json(cnos_dets_dir / cnos_dets_path)
     all_cnos_dets_per_image = group_by_image_level(all_cnos_dets, image_key="image_id")
 
     if test_setting == "detection":
@@ -238,7 +239,7 @@ def load_test_list_and_cnos_detections(
         f"{dataset_name, test_setting, year} is not available"
     )
     logger.info(f"Loading test list from {target_file_path}")
-    test_list = inout.load_json(target_file_path)
+    test_list = load_json(target_file_path)
     selected_detections = []
     for test in tqdm(test_list):
         test_object_id = test["obj_id"]

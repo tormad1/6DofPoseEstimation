@@ -1,44 +1,42 @@
+from pathlib import Path
+
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
+from hydra.utils import to_absolute_path
 from src.utils.batch import BatchedData
 from einops import rearrange
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
-descriptor_sizes = {
-    "dinov2_vits14": 384,
-    "dinov2_vitb14": 768,
-    "dinov2_vitl14": 1024,
-    "dinov2_vitg14": 1536,
-}
 
 
 class AENet(pl.LightningModule):
     def __init__(
         self,
         model_name,
-        dinov2_model,
-        descriptor_size,
         max_batch_size,
+        dinov2_model=None,
+        dinov2_repo_dir="./dinov2",
         patch_size=14,
         **kwargs,
     ):
         super().__init__()
         self.model_name = model_name
-        self.dinov2_model = dinov2_model
-        self.descriptor_size = descriptor_size
+        self.dinov2_repo_dir = dinov2_repo_dir
+        self.dinov2_model = dinov2_model or self._load_dinov2_model()
         self.max_batch_size = max_batch_size
         self.patch_size = patch_size
         logger.info("Initialize AENet done!")
 
-    def reset_with_pretrained_weights(self):
-        device = self.device
-        self.dinov2_model = torch.hub.load("/home/napier6dof/dinov2", self.model_name, source="local")
-        self.dinov2_model = self.dinov2_model.to(device)
-
-    def get_toUpdate_parameters(self):
-        return self.dinov2_model.parameters()
+    def _load_dinov2_model(self):
+        repo_dir = Path(to_absolute_path(str(self.dinov2_repo_dir))).resolve()
+        if not repo_dir.exists():
+            raise FileNotFoundError(
+                f"DINOv2 repo not found at {repo_dir}. Set user.dinov2_repo_dir "
+                "or model.ae_net.dinov2_repo_dir to your local DINOv2 checkout."
+            )
+        return torch.hub.load(str(repo_dir), self.model_name, source="local")
 
     def compute_features(self, images):
         # with torch.no_grad():  # no gradients

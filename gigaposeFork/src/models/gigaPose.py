@@ -9,7 +9,7 @@ from src.utils.logging import get_logger
 from src.utils.batch import BatchedData
 from src.utils.time import Timer
 from src.models.poses import ObjectPoseRecovery
-import src.megapose.utils.tensor_collection as tc
+import src.utils.tensor_collection as tc
 from src.utils.inout import save_predictions_from_batched_predictions
 
 logger = get_logger(__name__)
@@ -22,10 +22,8 @@ class GigaPose(pl.LightningModule):
         ae_net,
         ist_net,
         testing_metric,
-        log_interval,
         log_dir,
         max_num_dets_per_forward=None,
-        test_setting="localization",
         **kwargs,
     ):
         # define the network
@@ -36,9 +34,7 @@ class GigaPose(pl.LightningModule):
         self.testing_metric = testing_metric
 
         self.max_num_dets_per_forward = max_num_dets_per_forward
-        self.test_setting = test_setting # if "localization" filter the predictions, else no filter the predictions
 
-        self.log_interval = log_interval
         self.log_dir = log_dir
         os.makedirs(self.log_dir, exist_ok=True)
         os.makedirs(osp.join(self.log_dir, "predictions"), exist_ok=True)
@@ -186,8 +182,6 @@ class GigaPose(pl.LightningModule):
             ).astype(np.int32)
             tar_label = torch.from_numpy(tar_label_np).to(device)
 
-            # template data
-            tar_label = torch.ones_like(tar_label)
             if dataset_name == "T282":
                 tar_label = torch.ones_like(tar_label)
             src_ae_features = template_data.ae_features[tar_label - 1]
@@ -202,7 +196,9 @@ class GigaPose(pl.LightningModule):
                 tar_mask=batch.tar_mask[idx_sample],
                 max_batch_size=None,
             )
-            predictions_.infos = batch.infos
+            predictions_.infos = batch.infos.iloc[idx_sample.cpu().numpy()].reset_index(
+                drop=True
+            )
             if idx_sub_batch == 0:
                 predictions = predictions_
             else:

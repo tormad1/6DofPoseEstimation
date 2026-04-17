@@ -2,7 +2,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from einops import rearrange, repeat
-import src.megapose.utils.tensor_collection as tc
+import src.utils.tensor_collection as tc
 from src.utils.batch import BatchedData
 
 

@@ -27,9 +27,6 @@ class ISTNet(pl.LightningModule):
         self._init_weights()
         logger.info("Init for ISTNet done!")
 
-    def get_toUpdate_parameters(self):
-        return list(self.backbone.parameters()) + list(self.regressor.parameters())
-
     def _init_weights(self):
         """Init weights for the MLP"""
         for module in self.modules():
