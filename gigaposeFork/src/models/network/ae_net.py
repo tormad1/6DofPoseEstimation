@@ -2,7 +2,6 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-import pytorch_lightning as pl
 from hydra.utils import to_absolute_path
 from src.utils.batch import BatchedData
 from einops import rearrange
@@ -11,7 +10,7 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-class AENet(pl.LightningModule):
+class AENet(torch.nn.Module):
     def __init__(
         self,
         model_name,

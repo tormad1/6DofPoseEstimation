@@ -5,6 +5,7 @@ os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import hydra
+import torch
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate, to_absolute_path
 from torch.utils.data import DataLoader
@@ -25,21 +26,16 @@ def run_test(cfg: DictConfig):
         logger.warning("Setting machine.num_workers=0 for Windows DataLoader startup")
         cfg.machine.num_workers = 0
 
-    logger.info("Initializing trainer")
-    cfg_trainer = cfg.machine.trainer
-    if cfg_trainer.get("logger") and "TensorBoardLogger" in cfg_trainer.logger._target_:
-        tensorboard_dir = f"{cfg.save_dir}/{cfg_trainer.logger.name}"
-        os.makedirs(tensorboard_dir, exist_ok=True)
-        logger.info(f"Tensorboard logger initialized at {tensorboard_dir}")
     os.makedirs(cfg.save_dir, exist_ok=True)
 
     if cfg.disable_output:
         log = start_disable_output(os.path.join(cfg.save_dir, "test.log"))
 
-    trainer = instantiate(cfg_trainer)
-    logger.info("Trainer initialized!")
-
+    device = torch.device("cpu")
     model = instantiate(cfg.model)
+    load_model_checkpoint(model, cfg.model.checkpoint_path, device)
+    model.to(device)
+    model.eval()
     logger.info("Model initialized!")
 
     cfg.data.test.dataloader.dataset_name = cfg.test_dataset_name
@@ -64,9 +60,10 @@ def run_test(cfg: DictConfig):
     model.run_id = cfg.run_id or "cpu_rgb"
     logger.info("Dataloaders initialized!")
 
-    trainer.test(
-        model, dataloaders=test_dataloader, ckpt_path=cfg.model.checkpoint_path
-    )
+    with torch.no_grad():
+        for idx_batch, batch in enumerate(test_dataloader):
+            model.test_step(batch.to(device), idx_batch)
+    model.on_test_epoch_end()
 
     if cfg.disable_output:
         stop_disable_output(log)
@@ -83,6 +80,19 @@ def normalize_paths(cfg: DictConfig):
     cfg.data.test.dataloader.template_config.dir = to_absolute_path(
         str(cfg.data.test.dataloader.template_config.dir)
     )
+
+
+def load_model_checkpoint(model, checkpoint_path, device):
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    state_dict = checkpoint.get("state_dict", checkpoint)
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    if missing:
+        logger.warning(f"Missing checkpoint keys: {len(missing)}")
+    if unexpected:
+        logger.warning(f"Unexpected checkpoint keys: {len(unexpected)}")
 
 
 if __name__ == "__main__":

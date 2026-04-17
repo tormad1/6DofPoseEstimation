@@ -2,7 +2,6 @@ import os
 import os.path as osp
 import numpy as np
 import torch
-import pytorch_lightning as pl
 from tqdm import tqdm
 import pandas as pd
 from src.utils.logging import get_logger
@@ -15,7 +14,7 @@ from src.utils.inout import save_predictions_from_batched_predictions
 logger = get_logger(__name__)
 
 
-class GigaPose(pl.LightningModule):
+class GigaPose(torch.nn.Module):
     def __init__(
         self,
         model_name,
@@ -48,6 +47,10 @@ class GigaPose(pl.LightningModule):
         self.test_dataset_name = None
 
         logger.info("Initialize GigaPose done!")
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
     def set_template_data(self, dataset_name):
         logger.info("Initializing template data ...")
@@ -293,11 +296,10 @@ class GigaPose(pl.LightningModule):
         return 0
 
     def on_test_epoch_end(self):
-        if self.global_rank == 0:
-            prediction_dir = osp.join(self.log_dir, "predictions")
-            save_predictions_from_batched_predictions(
-                prediction_dir,
-                dataset_name=self.test_dataset_name,
-                model_name=self.model_name,
-                run_id=self.run_id,
-            )
+        prediction_dir = osp.join(self.log_dir, "predictions")
+        save_predictions_from_batched_predictions(
+            prediction_dir,
+            dataset_name=self.test_dataset_name,
+            model_name=self.model_name,
+            run_id=self.run_id,
+        )

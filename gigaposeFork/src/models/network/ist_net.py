@@ -1,14 +1,13 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
 from src.utils.batch import BatchedData, gather
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class ISTNet(pl.LightningModule):
+class ISTNet(nn.Module):
     def __init__(
         self,
         model_name,
