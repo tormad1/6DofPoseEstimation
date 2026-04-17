@@ -122,7 +122,8 @@ def reduce_dict(input_dict: Dict[str, Any], average: bool = True) -> Dict[str, A
         for k in sorted(input_dict.keys()):
             names.append(k)
             values.append(input_dict[k])
-        values = torch.tensor(values).float().cuda()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        values = torch.tensor(values, device=device).float()
         dist.all_reduce(values)
         if average:
             values /= world_size
@@ -131,7 +132,6 @@ def reduce_dict(input_dict: Dict[str, Any], average: bool = True) -> Dict[str, A
 
 
 def init_distributed_mode() -> None:
-    assert torch.cuda.device_count() == 1
     if "MASTER_PORT" not in os.environ:
         os.environ["MASTER_PORT"] = str(12345)
         os.environ["MASTER_ADDR"] = "127.0.0.1"
@@ -141,8 +141,9 @@ def init_distributed_mode() -> None:
     rank = int(os.environ.get("RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     logger.info(f"Rank: {rank}, World size: {world_size}")
+    backend = "nccl" if torch.cuda.is_available() else "gloo"
     torch.distributed.init_process_group(
-        backend="nccl",
+        backend=backend,
         rank=rank,
         world_size=world_size,
         timeout=datetime.timedelta(seconds=4 * 1800),  # 2 hours

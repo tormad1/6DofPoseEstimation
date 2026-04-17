@@ -63,16 +63,11 @@ class TemplateData:
         )
         return sampled_idx_negatives
 
-    def load_template(self, view_id, inplane=None):
+    def load_template(self, view_id, inplane=None, load_depth=True):
         image_path = f"{self.template_dir}/{view_id:06d}.png"
         depth_path = f"{self.template_dir}/{view_id:06d}_depth.png"
         assert os.path.exists(image_path), f"{image_path} does not exist"
-        # assert os.path.exists(depth_path), f"{depth_path} does not exist"
-        if not os.path.exists(depth_path):
-            depth_path = depth_path.replace("_blenderproc", "")
-            assert os.path.exists(depth_path), f"{depth_path} does not exist"
         rgba = open_image(image_path, inplane)
-        depth = open_image(depth_path, inplane)
         box = rgba.getbbox()
         box_size = (box[2] - box[0], box[3] - box[1])
         if min(box_size) == 0:
@@ -80,9 +75,16 @@ class TemplateData:
             logger.warning(
                 f"Template {image_path} has zero area, setting to null template"
             )
-        return {"rgba": np.array(rgba), "depth": np.array(depth), "box": np.array(box)}
+        data = {"rgba": np.array(rgba), "box": np.array(box)}
+        if load_depth:
+            assert os.path.exists(depth_path), f"{depth_path} does not exist"
+            depth = open_image(depth_path, inplane)
+            data["depth"] = np.array(depth)
+        return data
 
-    def load_set_of_templates(self, view_ids, reload=False, inplanes=None, reset=True):
+    def load_set_of_templates(
+        self, view_ids, reload=False, inplanes=None, reset=True, load_depth=True
+    ):
         if inplanes is None:
             inplanes = [None for _ in view_ids]
         root_dir = os.path.dirname(self.template_dir)
@@ -92,24 +94,32 @@ class TemplateData:
         if os.path.exists(preprocessed_file) and reload and not reset:
             data = np.load(preprocessed_file)
             rgba = torch.from_numpy(data["rgba"]).float()
-            depth = torch.from_numpy(data["depth"]).float()
             box = torch.from_numpy(data["box"]).long()
-            return {"rgba": rgba, "depth": depth, "box": box}
+            output = {"rgba": rgba, "box": box}
+            if load_depth:
+                output["depth"] = torch.from_numpy(data["depth"]).float()
+            return output
         else:
             os.makedirs(f"{root_dir}/preprocessed", exist_ok=True)
-            data = {"rgba": [], "depth": [], "box": []}
+            data = {"rgba": [], "box": []}
+            if load_depth:
+                data["depth"] = []
             for view_id, inplane in zip(view_ids, inplanes):
-                view_data = self.load_template(view_id, inplane=inplane)
+                view_data = self.load_template(
+                    view_id, inplane=inplane, load_depth=load_depth
+                )
                 rgba = torch.from_numpy(view_data["rgba"] / 255).float()
-                depth = torch.from_numpy(np.float32(view_data["depth"])).float()
                 box = torch.from_numpy(view_data["box"]).long()
                 data["rgba"].append(rgba)
-                data["depth"].append(depth)
+                if load_depth:
+                    depth = torch.from_numpy(np.float32(view_data["depth"])).float()
+                    data["depth"].append(depth)
                 data["box"].append(box)
             data["rgba"] = torch.stack(data["rgba"]).permute(0, 3, 1, 2)
-            data["depth"] = torch.stack(data["depth"]).unsqueeze(1)
+            if load_depth:
+                data["depth"] = torch.stack(data["depth"]).unsqueeze(1)
             data["box"] = torch.stack(data["box"])
-            if reload:
+            if reload and load_depth:
                 np.savez(
                     preprocessed_file,
                     rgba=data["rgba"].numpy(),
@@ -123,7 +133,8 @@ class TemplateData:
         data["rgba"], data["M"] = transform(
             images=data["rgba"], boxes=data["box"], return_transform=True
         )
-        data["depth"] = transform(images=data["depth"], boxes=data["box"])
+        if "depth" in data:
+            data["depth"] = transform(images=data["depth"], boxes=data["box"])
         return data
 
     def load_pose(self, view_ids=None, inplanes=[0]):
@@ -178,7 +189,9 @@ class TemplateData:
     def read_test_mode(
         self,
     ):
-        data = self.load_set_of_templates(view_ids=np.arange(0, self.num_templates))
+        data = self.load_set_of_templates(
+            view_ids=np.arange(0, self.num_templates), load_depth=False
+        )
         poses = self.load_pose()
         return data, poses
 

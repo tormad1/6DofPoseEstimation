@@ -1,8 +1,7 @@
 defaults:
   - user: default
   - machine: local
-  - callback: base
-  - data: all
+  - data: inference
   - model: large
   - _self_
 
@@ -10,12 +9,10 @@ nets_to_train: all
 
 save_dir: ${machine.root_dir}/results/${name_exp}
 name_exp:  ${model.model_name}_${run_id}
-test_dataset_name: 
+test_dataset_name: T282
 test_setting: localization # localization: load target_files or detection: not load target_files
 
-run_id: 
+run_id: cpu_rgb
 disable_output: false
 
-# for refinement
-use_multiple: true
 max_num_dets_per_forward: 4 # set None to disable, 2 is the minimum when enabled

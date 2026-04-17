@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
-import logging
 from src.utils.batch import BatchedData
 from einops import rearrange
 from src.utils.logging import get_logger
@@ -71,21 +70,3 @@ class AENet(pl.LightningModule):
     def forward(self, images):
         features = self.forward_by_chunk(images)
         return features
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    from omegaconf import DictConfig, OmegaConf
-    from hydra.utils import instantiate
-    from PIL import Image
-    from hydra.experimental import compose, initialize
-
-    with initialize(config_path="../../../configs/"):
-        cfg = compose(config_name="train.yaml")
-
-    model = instantiate(cfg.model.ae_net)
-    model = model.to("cuda")
-
-    images = torch.rand(2, 3, 224, 224).to(device="cuda")
-    features = model(images)
-    print(features.shape)

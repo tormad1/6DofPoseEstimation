@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 import torch
 from src.utils.logging import get_logger
 from src.utils.bbox import BoundingBox
@@ -61,6 +60,8 @@ class CropResizePad:
         return out_data
 
     def forward_image_wrap(self, images, M):
+        import cv2
+
         images_np = images.permute(0, 2, 3, 1).cpu().numpy()
         M_np = M.cpu().numpy()
         new_images = [

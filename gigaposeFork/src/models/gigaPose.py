@@ -8,21 +8,15 @@ from einops import repeat
 import pytorch_lightning as pl
 from tqdm import tqdm
 import pandas as pd
-from src.utils.logging import get_logger, log_image
+from src.utils.logging import get_logger
 from src.utils.batch import BatchedData, gather
 from src.utils.optimizer import HybridOptim
-from torchvision.utils import save_image
 from src.utils.time import Timer
 from src.models.loss import cosine_similarity
 from src.lib3d.torch import (
     cosSin,
     get_relative_scale_inplane,
     geodesic_distance,
-)
-from src.libVis.torch import (
-    plot_Kabsch,
-    plot_keypoints_batch,
-    save_tensor_to_image,
 )
 from src.models.poses import ObjectPoseRecovery
 import src.megapose.utils.tensor_collection as tc
@@ -271,15 +265,6 @@ class GigaPose(pl.LightningModule):
         for idx_dataset, batch in enumerate(batchs):
             if batch is None:
                 continue
-            if idx_batch % self.log_interval == 0:
-                vis_pts = plot_keypoints_batch(batch)
-                sample_path = f"{self.log_dir}/sample_rank{self.global_rank}.png"
-                save_tensor_to_image(vis_pts, sample_path)
-                log_image(
-                    logger=self.logger,
-                    name=f"vis/train_samples_{idx_dataset}",
-                    path=sample_path,
-                )
 
             if self.optim_config.nets_to_train in ["ist", "all"]:
                 self.timer.tic()
@@ -338,16 +323,6 @@ class GigaPose(pl.LightningModule):
             on_step=True,
             on_epoch=False,
             prog_bar=True,
-        )
-
-        # visualize matches
-        vis_pts = plot_keypoints_batch(batch, type_data="pred")
-        sample_path = f"{self.log_dir}/{split}_sample_rank{self.global_rank}.png"
-        save_tensor_to_image(vis_pts, sample_path)
-        log_image(
-            logger=self.logger,
-            name=f"vis/{split}_samples",
-            path=sample_path,
         )
 
     def validation_step(self, batch, idx_batch):
@@ -448,36 +423,6 @@ class GigaPose(pl.LightningModule):
         )
         return selected_idxs, predictions
 
-    def vis_retrieval(
-        self, template_data, batch, selected_idxs, predictions, idx_batch
-    ):
-        device = template_data.rgb.device
-        idx_sample = torch.arange(0, predictions.id_src.shape[0], device=device)
-        tar_label_np = np.asarray(predictions.infos.label).astype(np.int32)
-        tar_label = torch.from_numpy(tar_label_np).to(device)
-
-        src_imgs = template_data.rgb[tar_label - 1]
-        src_masks = template_data.mask[tar_label - 1]
-        tar_img = batch.tar_img[selected_idxs]
-        tar_mask = batch.tar_mask[selected_idxs]
-        pred_imgs = []
-        for idx_k in range(self.testing_metric.k):
-            batch = tc.PandasTensorCollection(
-                infos=pd.DataFrame(),
-                src_img=src_imgs[idx_sample, predictions.id_src[:, idx_k]].clone(),
-                src_mask=src_masks[idx_sample, predictions.id_src[:, idx_k]].clone(),
-                tar_img=tar_img,
-                tar_mask=tar_mask,
-                src_pts=predictions.ransac_src_pts[:, idx_k],
-                tar_pts=predictions.ransac_tar_pts[:, idx_k],
-            )
-            keypoint_img = plot_keypoints_batch(batch, concate_input_in_pred=False)
-            wrap_img = plot_Kabsch(batch, predictions.M[:, idx_k])
-            pred_img = torch.cat([keypoint_img, wrap_img], dim=3)
-            pred_imgs.append(pred_img)
-        pred_imgs = torch.cat(pred_imgs, dim=0)
-        return pred_imgs
-
     def eval_retrieval(
         self,
         batch,
@@ -485,7 +430,8 @@ class GigaPose(pl.LightningModule):
         dataset_name,
         sort_pred_by_inliers=True,
     ):
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         # prepare template data
         if dataset_name not in self.template_datas:
             self.set_template_data(dataset_name)
@@ -617,26 +563,6 @@ class GigaPose(pl.LightningModule):
         selected_idxs, predictions = self.filter_and_save(
             predictions, test_list=batch.test_list, time=total_time, save_path=save_path
         )
-        if self.log_interval > 0 and idx_batch % self.log_interval == 0 and self.max_num_dets_per_forward is None:
-            vis_img = self.vis_retrieval(
-                template_data=template_data,
-                batch=batch,
-                selected_idxs=selected_idxs,
-                predictions=predictions,
-                idx_batch=idx_batch,
-            )
-            sample_path = f"{self.log_dir}/retrieved_sample_rank{self.global_rank}_{idx_batch}.png"
-            save_image(
-                vis_img,
-                sample_path,
-                nrow=predictions.id_src.shape[0],
-            )
-            log_image(
-                logger=self.logger,
-                name=f"{dataset_name}",
-                path=sample_path,
-            )
-
     @torch.no_grad()
     def test_step(self, batch, idx_batch):
         self.eval_retrieval(

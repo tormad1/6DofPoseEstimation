@@ -6,7 +6,6 @@ log_dir: ${save_dir}
 defaults:
   - ae_net: dinov2_l
   - ist_net: resnet
-  - refiner: rgb
 
 training_loss:
   contrast_loss:

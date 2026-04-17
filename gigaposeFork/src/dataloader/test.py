@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 # Standard Library
-import os
-import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 
@@ -388,61 +386,3 @@ class GigaPoseTestSet(GigaPoseTrainSet):
                 infos=infos,
             )
         return out_data
-
-
-if __name__ == "__main__":
-    import time
-    import torch
-    from hydra.experimental import compose, initialize
-    from torch.utils.data import DataLoader
-    from src.megapose.datasets.scene_dataset import SceneObservation
-    from src.libVis.torch import plot_keypoints_batch, plot_Kabsch
-    from torchvision.utils import save_image
-    from hydra.utils import instantiate
-    from omegaconf import OmegaConf
-    from src.models.ransac import RANSAC
-    import logging
-
-    logging.basicConfig(level=logging.DEBUG)
-    with initialize(config_path="../../configs/"):
-        cfg = compose(config_name="train.yaml")
-    OmegaConf.set_struct(cfg, False)
-
-    init_loc_path = "/home/nguyen/Documents/datasets/gigaPose_datasets/results/large_tudlGigaPose/predictions/large-pbrreal-rgb-mmodel_tudl-test_tudlGigaPose.csv"
-    save_dir = "./tmp"
-    os.makedirs(save_dir, exist_ok=True)
-
-    cfg.machine.batch_size = 1
-    cfg.data.test.dataloader.batch_size = cfg.machine.batch_size
-    cfg.data.test.dataloader.dataset_name = "ycbv"
-    # cfg.data.test.dataloader.init_loc_path = init_loc_path
-    test_dataset = instantiate(cfg.data.test.dataloader)
-
-    dataloader = DataLoader(
-        test_dataset.web_dataloader.datapipeline,
-        batch_size=cfg.machine.batch_size,
-        num_workers=10,
-        collate_fn=test_dataset.collate_fn,
-        # collate_fn=test_dataset.collate_refine_fn,
-    )
-    ransac = RANSAC(pixel_threshold=5)
-    start_time = time.time()
-    for idx, batch in enumerate(dataloader):
-        # batch = batch.cuda()
-        end_time = time.time()
-        print(f"Time: {end_time - start_time}")
-        start_time = end_time
-
-        keypoint_img = plot_keypoints_batch(batch, concate_input_in_pred=False)
-        batch.relScale = batch.relScale.unsqueeze(1).repeat(1, 256)
-        batch.relInplane = batch.relInplane.unsqueeze(1).repeat(1, 256)
-
-        # vis relative scale and inplane
-        M, idx_failed, _ = ransac(batch)
-        wrap_img = plot_Kabsch(batch, M)
-        vis_img = torch.cat([keypoint_img, wrap_img], dim=3)
-        save_image(
-            vis_img,
-            os.path.join(save_dir, f"{idx:06d}.png"),
-            nrow=4,
-        )

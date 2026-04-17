@@ -15,37 +15,8 @@ limitations under the License.
 """
 
 
-# Standard Library
 import os
-import cv2
 
 
-def assign_gpu() -> None:
-    if "CUDA_VISIBLE_DEVICES" in os.environ:
-        device_ids = os.environ["CUDA_VISIBLE_DEVICES"]
-        device_ids = device_ids.split(",")
-    else:
-        device_ids = range(int(os.environ.get("LOCAL_WORLD_SIZE", 1)))
-    local_rank = int(os.environ.get("LOCAL_RANK", 0))
-    assert local_rank < len(device_ids)
-    cuda_id = int(device_ids[local_rank])
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_id)
-    if "SLURM_JOB_NODELIST" in os.environ:
-        os.environ["EGL_VISIBLE_DEVICES"] = str(cuda_id)
-
-
-# assign_gpu()
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
-
-if "EGL_VISIBLE_DEVICES" not in os.environ:
-    os.environ["EGL_VISIBLE_DEVICES"] = "0"
-
-# for k in (
-#     "MKL_NUM_THREADS",
-#     "OMP_NUM_THREADS",
-#     "CUDA_VISIBLE_DEVICES",
-#     "EGL_VISIBLE_DEVICES",
-# ):
-#     if k in os.environ:
-#         print(f"{k}: {os.environ[k]}")
