@@ -1,32 +1,65 @@
 using UnityEngine;
+using System.IO;
+using System.Collections;
 
 public class WebCam : MonoBehaviour
 {
     [SerializeField] private Material WebCamMaterial;
-    //[SerializeField] private string webcamName = ""
+    [SerializeField] private float captureIntervalSeconds = 2.0f;
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    // Must match what your C++ code polls
+    private string outputPath = @"C:\temp\webcam_frame.jpg";
+    private string outputPathTmp = @"C:\temp\webcam_frame.tmp.jpg";
+
+    private WebCamTexture webcamTexture;
+    private Texture2D captureBuffer;
+
     void Start()
     {
-        WebCamDevice[] devices = WebCamTexture.devices;
-
-        //Log out each webcam
-        Debug.Log("Available webcams:");
-        foreach(WebCamDevice webcam in devices)
-        {
-            Debug.Log(webcam.name);
-        }
-
-        //We get the webcam by name.
-        //Note: on PC you can have multiple, but on mobile you can't
-        //Can just call new() to get the deafult
-        WebCamTexture webcamTexture = new();
-
-        //Set our material texture to be our webcam texture.
+        Application.runInBackground = true;
+        webcamTexture = new WebCamTexture();
         WebCamMaterial.mainTexture = webcamTexture;
-
-        //Start the webcam:
         webcamTexture.Play();
-          
+
+        // Ensure output dir exists
+        Directory.CreateDirectory(@"C:\temp");
+
+        StartCoroutine(CaptureLoop());
+    }
+
+    IEnumerator CaptureLoop()
+    {
+        // Wait for webcam to actually start
+        while (!webcamTexture.didUpdateThisFrame)
+            yield return null;
+
+        while (true)
+        {
+            CaptureFrame();
+            yield return new WaitForSeconds(captureIntervalSeconds);
+        }
+    }
+
+    void CaptureFrame()
+    {
+        try
+        {
+            if (captureBuffer == null || captureBuffer.width != webcamTexture.width)
+                captureBuffer = new Texture2D(webcamTexture.width, webcamTexture.height);
+
+            captureBuffer.SetPixels(webcamTexture.GetPixels());
+            captureBuffer.Apply();
+
+            byte[] jpg = ImageConversion.EncodeToJPG(captureBuffer, 90);
+
+            File.WriteAllBytes(outputPathTmp, jpg);
+            File.Copy(outputPathTmp, outputPath, overwrite: true);
+
+            Debug.Log("Frame captured at " + System.DateTime.Now.ToString("HH:mm:ss"));
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("CaptureFrame failed: " + e.Message);
+        }
     }
 }

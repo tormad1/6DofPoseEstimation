@@ -4,3 +4,14 @@
 x64
 6DofPose.*
 *.dll
+resources/images/output/*.jpg
+
+
+# Unity generated
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/

@@ -15,6 +15,13 @@ cv::Mat loadImage(std::string imgName){
 	return image;
 }
 
+cv::Mat loadImage_abs(const std::string& fullpath) {
+	cv::Mat image = cv::imread(fullpath);
+	if (image.empty())
+		std::cout << "Could not read: " << fullpath << std::endl;
+	return image;
+}
+
 // Custom path save.
 void saveImage(cv::Mat image, std::string name) {
 
