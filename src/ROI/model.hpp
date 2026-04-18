@@ -41,11 +41,11 @@ void test_loadModel(int model);
 
 // Process
 std::vector<float> preprocess(const cv::Mat& letterboxed);
-cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx);
+std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx);
 
 
 
-cv::Mat cropDetection(const cv::Mat& image, const std::vector<Detection>& detections);
+std::optional<cv::Mat> cropDetection(const cv::Mat& image, const std::vector<Detection>& detections);
 
 
 

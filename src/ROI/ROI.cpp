@@ -25,10 +25,16 @@ int main() {
                 cv::Mat image = loadImage_abs(FRAME_PATH);
                 if (!image.empty()) {
                     cv::Mat letterboxed = letterboxResizeImage(image, 640, 640);
-                    cv::Mat cropped = runInference(image, letterboxed, ctx);
+                    auto cropped = runInference(image, letterboxed, ctx);
 
                     // Save with timestamp to avoid overwriting
-					saveImage_ts(cropped, "cropped.jpg");
+					//saveImage_ts(cropped, "cropped.jpg");
+                    if (cropped.has_value()) {
+                        saveImage_absOverwrite(cropped.value());
+                    }
+                    else {
+                        std::cout << "Failed Detection" << std::endl;
+                    }
                 }
                 else {
 					std::cout << "Failed to load image from: " << FRAME_PATH << std::endl;

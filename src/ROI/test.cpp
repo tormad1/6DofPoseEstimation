@@ -9,7 +9,9 @@ void test_allMonsters(OrtContext& ctx) {
 		std::string imgName = "monster-" + std::to_string(i) + ".jpg";
 		cv::Mat image = loadImage(imgName);
 		cv::Mat letterboxed = letterboxResizeImage(image, 640, 640);
-		cv::Mat cropped = runInference(image, letterboxed, ctx);
-		saveImage(cropped, imgName);
+		auto cropped = runInference(image, letterboxed, ctx);
+		if (cropped.has_value()) {
+		saveImage(cropped.value(), imgName);
+		}
 	}
 };

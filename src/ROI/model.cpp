@@ -3,6 +3,7 @@
 #include <iostream>
 #include "crop.hpp"
 #include "model.hpp"
+#include <optional>
 
 
 void test_loadModel(int model) {
@@ -51,7 +52,7 @@ std::vector<float> preprocess(const cv::Mat& letterboxed) {
 
 
 
-cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx) {
+std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx) {
 
 
     std::vector<float> inputTensor = preprocess(letterboxed);
@@ -103,7 +104,7 @@ cv::Mat runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtCon
         original.rows
     );
 
-    cv::Mat cropped = cropDetection(original, detections);
+    auto cropped = cropDetection(original, detections);
     return cropped;
 }
 
@@ -199,10 +200,10 @@ std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int orig
     return detections;
 }
 
-cv::Mat cropDetection(const cv::Mat& image, const std::vector<Detection>& detections) {
+std::optional<cv::Mat> cropDetection(const cv::Mat& image, const std::vector<Detection>& detections) {
     if (detections.empty()) {
-        std::cout << "No detections, returning original image" << std::endl;
-        return image.clone();
+        //std::cout << "No detections, returning original image" << std::endl;
+        return std::nullopt;
     }
 
     // Pick highest confidence box

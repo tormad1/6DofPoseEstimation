@@ -1,5 +1,6 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <filesystem>
 
 cv::Mat loadImage(std::string imgName){
 	
@@ -34,6 +35,18 @@ void saveImage_abs(cv::Mat image, const std::string name) {
 	std::string absPath = "C:\\temp\\" + croppedName;
 	cv::imwrite(absPath, image);
 	std::cout << "Image has been saved to: " << absPath << std::endl;
+}
+
+void saveImage_absOverwrite(cv::Mat image) {
+	cv::imwrite("C:\\temp\\cropped_tmp.jpg", image);
+
+	// Same logic as in the C#
+	// Save full file first then do quick overwrite.
+	std::filesystem::copy_file(
+		"C:\\temp\\cropped_tmp.jpg",
+		"C:\\temp\\cropped.jpg",
+		std::filesystem::copy_options::overwrite_existing
+	);
 }
 
 void saveImage_ts(cv::Mat image, std::string name) {
