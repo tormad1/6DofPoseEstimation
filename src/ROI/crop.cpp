@@ -17,18 +17,29 @@ cv::Mat loadImage(std::string imgName){
 
 cv::Mat loadImage_abs(const std::string& fullpath) {
 	cv::Mat image = cv::imread(fullpath);
-	if (image.empty())
-		std::cout << "Could not read: " << fullpath << std::endl;
 	return image;
 }
 
 // Custom path save.
 void saveImage(cv::Mat image, std::string name) {
 
-	std::string croppedName = "cropped-" + name;
+	std::string croppedName = "cropped_" + name;
 	std::string fullpath = "resources/images/output/" + croppedName;
 	cv::imwrite(fullpath, image);
 	std::cout << "Image has been saved to: " << fullpath << std::endl;
+}
+
+void saveImage_abs(cv::Mat image, const std::string name) {
+	std::string croppedName = "cropped_" + name;
+	std::string absPath = "C:\\temp\\" + croppedName;
+	cv::imwrite(absPath, image);
+	std::cout << "Image has been saved to: " << absPath << std::endl;
+}
+
+void saveImage_ts(cv::Mat image, std::string name) {
+	auto ts = std::chrono::system_clock::now().time_since_epoch().count();
+	std::string timestampedName = "frame_" + std::to_string(ts) + ".jpg";
+	saveImage_abs(image, timestampedName);
 }
 
 

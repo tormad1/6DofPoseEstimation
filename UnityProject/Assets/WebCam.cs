@@ -5,9 +5,10 @@ using System.Collections;
 public class WebCam : MonoBehaviour
 {
     [SerializeField] private Material WebCamMaterial;
-    [SerializeField] private float captureIntervalSeconds = 2.0f;
+    [SerializeField] private float captureIntervalSeconds = 1.0f;   // Default value
 
-    // Must match what your C++ code polls
+    // Static path in temp folder for webcam captures.
+        // Should be temporary solution for piping output.
     private string outputPath = @"C:\temp\webcam_frame.jpg";
     private string outputPathTmp = @"C:\temp\webcam_frame.tmp.jpg";
 
@@ -23,7 +24,6 @@ public class WebCam : MonoBehaviour
 
         // Ensure output dir exists
         Directory.CreateDirectory(@"C:\temp");
-
         StartCoroutine(CaptureLoop());
     }
 
@@ -40,6 +40,9 @@ public class WebCam : MonoBehaviour
         }
     }
 
+
+
+    // Main capture func.
     void CaptureFrame()
     {
         try
@@ -52,10 +55,13 @@ public class WebCam : MonoBehaviour
 
             byte[] jpg = ImageConversion.EncodeToJPG(captureBuffer, 90);
 
+
+            // To avoid file-write syncing issues only read renamed one
+            // on the c++ side.
             File.WriteAllBytes(outputPathTmp, jpg);
             File.Copy(outputPathTmp, outputPath, overwrite: true);
 
-            Debug.Log("Frame captured at " + System.DateTime.Now.ToString("HH:mm:ss"));
+            //Debug.Log("Frame captured at " + System.DateTime.Now.ToString("HH:mm:ss"));
         }
         catch (System.Exception e)
         {
