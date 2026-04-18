@@ -14,4 +14,4 @@ resources/images/output/*.jpg
 [Bb]uild/
 [Bb]uilds/
 [Ll]ogs/
-[Uu]ser[Ss]ettings/
+#[Uu]ser[Ss]ettings/
