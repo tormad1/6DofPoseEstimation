@@ -41,7 +41,7 @@ void test_loadModel(int model);
 
 // Process
 std::vector<float> preprocess(const cv::Mat& letterboxed);
-std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx);
+std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx, bool DEBUG);
 
 
 

@@ -1,9 +1,11 @@
 #include <onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <optional>
+
 #include "crop.hpp"
 #include "model.hpp"
-#include <optional>
+#include "debug.hpp"
 
 
 void test_loadModel(int model) {
@@ -52,7 +54,7 @@ std::vector<float> preprocess(const cv::Mat& letterboxed) {
 
 
 
-std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx) {
+std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx, bool DEBUG) {
 
 
     std::vector<float> inputTensor = preprocess(letterboxed);
@@ -83,8 +85,8 @@ std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& lett
     const char* inputName = inputNamePtr.get();
     const char* outputName = outputNamePtr.get();
 
-    std::cout << "Input name:  " << inputName << std::endl;
-    std::cout << "Output name: " << outputName << std::endl;
+    print_DEBUG("Input name:  " + *inputName, DEBUG);
+    print_DEBUG("Output name: " + *outputName, DEBUG);
 
     // Run
     auto outputTensors = ctx.session.Run(
@@ -189,6 +191,8 @@ std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int orig
         d.classId = classIds[idx];
         detections.push_back(d);
     }
+
+
 
     std::cout << "Detections after NMS: " << detections.size() << std::endl;
     for (auto& d : detections) {
