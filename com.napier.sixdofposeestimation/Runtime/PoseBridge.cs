@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -9,7 +9,7 @@ public class PoseBridge : MonoBehaviour
     private int mode = 0;
     public int intervalFrames = 10;
     private int frameCount = 0;
-    private Stopwatch stopwatch;
+    private System.Diagnostics.Stopwatch stopwatch;
     public PoseManager poseManager;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -24,42 +24,74 @@ public class PoseBridge : MonoBehaviour
     private static class DummyPoseNative
     {
         [DllImport("DummyPose", CallingConvention = CallingConvention.Cdecl)]
-        static public extern int GetDummyPose(ref Pose out_pose, long timestamp_us, int mode);
+        public static extern int GetDummyPose(ref Pose out_pose, long timestamp_us, int mode);
     }
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    private static class GigaPoseBridgeNative
+    {
+        [DllImport("GigaPoseBridge", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int InitPython(string python_home);
+
+        [DllImport("GigaPoseBridge", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int OpenImageTest(string image_path, System.Text.StringBuilder out_buf, int out_buf_len);
+
+        [DllImport("GigaPoseBridge", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void ShutdownPython();
+    }
+
     void Start()
     {
-        stopwatch = Stopwatch.StartNew();
+        stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        string pythonHome = @"C:\Users\solar\miniconda3";
+        int initResult = GigaPoseBridgeNative.InitPython(pythonHome);
+        Debug.Log($"[PoseBridge] InitPython returned: {initResult}");
     }
+
+    void OnDestroy()
+    {
+        GigaPoseBridgeNative.ShutdownPython();
+        Debug.Log("[PoseBridge] Python shut down.");
+    }
+
     void Update()
     {
         frameCount++;
-        if (useDummy && frameCount == intervalFrames)
+        if (frameCount == intervalFrames)
         {
-            frameCount=0;
-            int status = GetPose(out var pose);
-            //Debug.Log(status);
-            if (status == 1 && poseManager != null)
+            frameCount = 0;
+
+            if (useDummy)
             {
-                poseManager.OnPose(pose);
+                int status = GetPose(out var pose);
+                if (status == 1 && poseManager != null)
+                    poseManager.OnPose(pose);
+            }
+            else if (croppedFrame != null)
+            {
+                SendFrameToPython(croppedFrame);
             }
         }
     }
-    // Update is called once per frame
+
     public int GetPose(out Pose pose)
     {
-        long timestampMicro = (stopwatch.ElapsedTicks * 1_000_000L) / Stopwatch.Frequency;
+        long timestampMicro = (stopwatch.ElapsedTicks * 1_000_000L) / System.Diagnostics.Stopwatch.Frequency;
         pose = default;
-
         if (useDummy)
-        {
             return DummyPoseNative.GetDummyPose(ref pose, timestampMicro, mode);
-        }
-
-        //return RealPoseNative.GetDummyPose(ref pose, timestampMicro, mode);
-        //NOT IMPLEMENTED YET
-
         return 0;
+    }
+
+    public void SendFrameToPython(Texture2D frame)
+    {
+        byte[] pngBytes = frame.EncodeToPNG();
+        string tempPath = Path.Combine(Application.temporaryCachePath, "frame.png");
+        File.WriteAllBytes(tempPath, pngBytes);
+
+        var outBuf = new System.Text.StringBuilder(256);
+        int result = GigaPoseBridgeNative.OpenImageTest(tempPath, outBuf, outBuf.Capacity);
+
+        Debug.Log($"[PoseBridge] OpenImageTest returned: {result}, output: {outBuf}");
     }
 }

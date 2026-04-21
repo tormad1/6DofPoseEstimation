@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="GigaPoseBridge/GigaPoseBridge.vcxproj" />
+  <Project Path="GigaPoseBridgeTest/GigaPoseBridgeTest.vcxproj" />
+</Solution>
