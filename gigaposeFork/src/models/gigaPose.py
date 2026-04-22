@@ -1,5 +1,8 @@
+import hashlib
+import json
 import os
 import os.path as osp
+from pathlib import Path
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -23,6 +26,8 @@ class GigaPose(torch.nn.Module):
         testing_metric,
         log_dir,
         max_num_dets_per_forward=None,
+        template_cache_dir=None,
+        template_cache_enabled=True,
         **kwargs,
     ):
         # define the network
@@ -33,6 +38,11 @@ class GigaPose(torch.nn.Module):
         self.testing_metric = testing_metric
 
         self.max_num_dets_per_forward = max_num_dets_per_forward
+        self.template_cache_dir = (
+            Path(template_cache_dir) if template_cache_dir is not None else None
+        )
+        self.template_cache_enabled = bool(template_cache_enabled)
+        self.checkpoint_cache_key = None
 
         self.log_dir = log_dir
         os.makedirs(self.log_dir, exist_ok=True)
@@ -53,35 +63,47 @@ class GigaPose(torch.nn.Module):
         return next(self.parameters()).device
 
     def set_template_data(self, dataset_name):
+        template_dataset = self.template_datasets[dataset_name]
+        cache_meta = self._template_cache_metadata(dataset_name, template_dataset)
+        cache_path = self._template_cache_path(dataset_name, cache_meta)
+        if self._load_template_cache(dataset_name, cache_path, cache_meta):
+            return
+
         logger.info("Initializing template data ...")
         self.timer.tic()
-        template_dataset = self.template_datasets[dataset_name]
-        names = ["rgb", "mask", "K", "M", "poses", "ae_features", "ist_features"]
+        names = ["mask", "K", "M", "poses", "ae_features", "ist_features"]
         template_data = {name: BatchedData(None) for name in names}
 
-        for idx in tqdm(range(len(template_dataset))):
-            for name in names:
-                if name in ["ae_features", "ist_features"]:
-                    continue
-                if name == "rgb":
-                    templates = template_dataset[idx].rgb.to(self.device)
-                    if self.max_num_dets_per_forward is None:
-                        template_data[name].append(templates)
+        with torch.inference_mode():
+            for idx in tqdm(range(len(template_dataset))):
+                sample = template_dataset[idx]
+                templates = sample.rgb.to(self.device)
+                template_data["ae_features"].append(self.ae_net(templates))
+                template_data["ist_features"].append(
+                    self.ist_net.forward_by_chunk(templates)
+                )
 
-                    ae_features = self.ae_net(templates)
-                    template_data["ae_features"].append(ae_features)
+                for name in ("mask", "K", "M", "poses"):
+                    template_data[name].append(getattr(sample, name).to(self.device))
 
-                    ist_features = self.ist_net.forward_by_chunk(templates)
-                    template_data["ist_features"].append(ist_features)
-                else:
-                    tmp = getattr(template_dataset[idx], name)
-                    template_data[name].append(tmp.to(self.device))
-        if self.max_num_dets_per_forward is not None:
-            names.remove("rgb")
         for name in names:
             template_data[name].stack()
             template_data[name] = template_data[name].data
 
+        self._register_template_data(dataset_name, template_data)
+        self._save_template_cache(cache_path, cache_meta, template_data)
+        num_obj = len(template_data["K"])
+        onboarding_time = self.timer.toc() / num_obj
+        self.timer.reset()
+        logger.info(f"Init {dataset_name} done! Avg time={onboarding_time} s/object")
+
+    def warmup_templates(self, dataset_name=None):
+        dataset_name = dataset_name or self.test_dataset_name
+        if dataset_name is None:
+            raise ValueError("dataset_name is required before warming up templates")
+        self.set_template_data(dataset_name)
+
+    def _register_template_data(self, dataset_name, template_data):
         self.template_datas[dataset_name] = tc.PandasTensorCollection(
             infos=pd.DataFrame(), **template_data
         )
@@ -90,17 +112,82 @@ class GigaPose(torch.nn.Module):
             template_Ms=template_data["M"],
             template_poses=template_data["poses"],
         )
-        num_obj = len(template_data["K"])
-        onboarding_time = self.timer.toc() / num_obj
-        self.timer.reset()
-        logger.info(f"Init {dataset_name} done! Avg time={onboarding_time} s/object")
 
-    def filter_and_save(
+    def _template_cache_metadata(self, dataset_name, template_dataset):
+        object_templates = template_dataset.template_dataset.list_object_templates
+        template_items = [
+            {
+                "label": template.label,
+                "num_templates": template.num_templates,
+                "pose_path": template.pose_path,
+                "template_dir": template.template_dir,
+            }
+            for template in object_templates
+        ]
+        crop_transform = getattr(template_dataset.transforms, "crop_transform", None)
+        return {
+            "version": 1,
+            "dataset_name": dataset_name,
+            "model_name": self.model_name,
+            "ae_model_name": getattr(self.ae_net, "model_name", None),
+            "ist_model_name": getattr(self.ist_net, "model_name", None),
+            "checkpoint": self.checkpoint_cache_key,
+            "crop_target_size": getattr(crop_transform, "target_size", None),
+            "patch_size": getattr(self.ae_net, "patch_size", None),
+            "objects": template_items,
+        }
+
+    def _template_cache_path(self, dataset_name, cache_meta):
+        if not self.template_cache_enabled or self.template_cache_dir is None:
+            return None
+        encoded_meta = json.dumps(cache_meta, sort_keys=True).encode("utf-8")
+        digest = hashlib.sha256(encoded_meta).hexdigest()[:16]
+        return self.template_cache_dir / f"{dataset_name}_{self.model_name}_{digest}.pt"
+
+    def _load_template_cache(self, dataset_name, cache_path, cache_meta):
+        if cache_path is None or not cache_path.exists():
+            return False
+        try:
+            try:
+                payload = torch.load(
+                    cache_path,
+                    map_location=self.device,
+                    weights_only=False,
+                )
+            except TypeError:
+                payload = torch.load(cache_path, map_location=self.device)
+            if payload.get("meta") != cache_meta:
+                return False
+            template_data = {
+                name: tensor.to(self.device)
+                for name, tensor in payload["tensors"].items()
+            }
+            self._register_template_data(dataset_name, template_data)
+            logger.info(f"Loaded template data cache from {cache_path}")
+            return True
+        except Exception as exc:
+            logger.warning(f"Failed to load template cache {cache_path}: {exc}")
+            return False
+
+    def _save_template_cache(self, cache_path, cache_meta, template_data):
+        if cache_path is None:
+            return
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tensors = {
+                name: tensor.detach().cpu()
+                for name, tensor in template_data.items()
+            }
+            torch.save({"meta": cache_meta, "tensors": tensors}, cache_path)
+            logger.info(f"Saved template data cache to {cache_path}")
+        except Exception as exc:
+            logger.warning(f"Failed to save template cache {cache_path}: {exc}")
+
+    def attach_test_metadata(
         self,
         predictions,
         test_list,
         time,
-        save_path,
         keep_only_testing_instances=True,
     ):
         labels = np.asarray(predictions.infos.label).astype(np.int32)
@@ -120,6 +207,9 @@ class GigaPose(torch.nn.Module):
                 detection_times.extend(
                     [test_list.infos.detection_time[idx] for _ in range(num_inst)]
                 )
+        else:
+            selected_idxs = np.arange(len(labels)).tolist()
+            detection_times = [0 for _ in selected_idxs]
         predictions = predictions[selected_idxs]
 
         detection_times = np.array(detection_times)
@@ -129,10 +219,19 @@ class GigaPose(torch.nn.Module):
         time = torch.ones_like(detection_times) * time
         predictions.register_tensor("detection_time", detection_times)
         predictions.register_tensor("time", time)
+        return selected_idxs, predictions
 
+    def save_batch_predictions(self, predictions, save_path):
         scene_id = np.asarray(predictions.infos.scene_id).astype(np.int32)
         im_id = np.asarray(predictions.infos.view_id).astype(np.int32)
         label = np.asarray(predictions.infos.label).astype(np.int32)
+        poses = predictions.pred_poses
+        scores = predictions.scores
+
+        if poses.ndim == 4 and poses.shape[1] == 1:
+            poses = poses[:, 0]
+        if scores.ndim == 2 and scores.shape[1] == 1:
+            scores = scores[:, 0]
 
         np.savez(
             save_path,
@@ -141,15 +240,30 @@ class GigaPose(torch.nn.Module):
             object_id=label,
             time=predictions.time.cpu().numpy(),
             detection_time=predictions.detection_time.cpu().numpy(),
-            poses=predictions.pred_poses.cpu().numpy(),
-            scores=predictions.scores.cpu().numpy(),
+            poses=poses.cpu().numpy(),
+            scores=scores.cpu().numpy(),
         )
+
+    def filter_and_save(
+        self,
+        predictions,
+        test_list,
+        time,
+        save_path,
+        keep_only_testing_instances=True,
+    ):
+        selected_idxs, predictions = self.attach_test_metadata(
+            predictions=predictions,
+            test_list=test_list,
+            time=time,
+            keep_only_testing_instances=keep_only_testing_instances,
+        )
+        self.save_batch_predictions(predictions, save_path)
         return selected_idxs, predictions
 
-    def eval_retrieval(
+    def predict_batch(
         self,
         batch,
-        idx_batch,
         dataset_name,
         sort_pred_by_inliers=True,
     ):
@@ -216,7 +330,7 @@ class GigaPose(torch.nn.Module):
         self.timer.tic()
         for idx_k in range(k):
             idx_sample = torch.arange(0, B, device=device)
-            idx_views = [idx_sample, predictions.id_src[:, idx_k]]
+            idx_views = (idx_sample, predictions.id_src[:, idx_k])
 
             tar_label_np = np.asarray(batch.infos.label).astype(np.int32)
             tar_label = torch.from_numpy(tar_label_np).to(device)
@@ -281,12 +395,26 @@ class GigaPose(torch.nn.Module):
         times["final_step"] = self.timer.toc()
         self.timer.reset()
         total_time = sum(times.values())
+        return predictions, total_time
 
+    def eval_retrieval(
+        self,
+        batch,
+        idx_batch,
+        dataset_name,
+        sort_pred_by_inliers=True,
+    ):
+        predictions, total_time = self.predict_batch(
+            batch=batch,
+            dataset_name=dataset_name,
+            sort_pred_by_inliers=sort_pred_by_inliers,
+        )
         save_path = osp.join(self.log_dir, "predictions", f"{idx_batch}.npz")
         selected_idxs, predictions = self.filter_and_save(
             predictions, test_list=batch.test_list, time=total_time, save_path=save_path
         )
-    @torch.no_grad()
+        return selected_idxs, predictions
+    @torch.inference_mode()
     def test_step(self, batch, idx_batch):
         self.eval_retrieval(
             batch,

@@ -33,8 +33,9 @@ class TensorCollection:
         return TensorCollection(**{key: value[ids] for key, value in self._tensors.items()})
 
     def __getattr__(self, name):
-        if name in self._tensors:
-            return self._tensors[name]
+        tensors = self.__dict__.get("_tensors")
+        if tensors is not None and name in tensors:
+            return tensors[name]
         if name in self.__dict__:
             return self.__dict__[name]
         raise AttributeError(name)

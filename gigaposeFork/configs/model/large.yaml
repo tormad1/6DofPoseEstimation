@@ -1,6 +1,8 @@
 _target_: src.models.gigaPose.GigaPose
 model_name: large
 log_dir: ${save_dir}
+template_cache_dir: ${machine.root_dir}/template_cache
+template_cache_enabled: true
 
 defaults:
   - ae_net: dinov2_l
@@ -8,7 +10,7 @@ defaults:
 
 testing_metric:
   _target_: src.models.matching.LocalSimilarity
-  k: 5
+  k: 1
   sim_threshold: 0.5
   patch_threshold: 3
 

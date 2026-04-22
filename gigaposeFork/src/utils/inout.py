@@ -114,7 +114,7 @@ def save_predictions_from_batched_predictions(
     ):
         data = np.load(osp.join(prediction_dir, file))
         assert len(data["poses"].shape) in [3, 4]
-        is_only_top1 = len(data["poses"].shape) == 3
+        is_only_top1 = len(data["poses"].shape) == 3 or data["poses"].shape[1] == 1
         if not is_only_top1:
             k = data["poses"].shape[1]
 
@@ -124,9 +124,18 @@ def save_predictions_from_batched_predictions(
                 obj_id = LMO_index_to_ID[obj_id - 1]
 
             if is_only_top1:
-                t = data["poses"][idx_sample][:3, 3].reshape(-1)
-                R = data["poses"][idx_sample][:3, :3].reshape(-1)
-                score = data["scores"][idx_sample]
+                pose = (
+                    data["poses"][idx_sample]
+                    if len(data["poses"].shape) == 3
+                    else data["poses"][idx_sample][0]
+                )
+                t = pose[:3, 3].reshape(-1)
+                R = pose[:3, :3].reshape(-1)
+                score = (
+                    data["scores"][idx_sample]
+                    if len(data["scores"].shape) == 1
+                    else data["scores"][idx_sample][0]
+                )
             else:
                 t = data["poses"][idx_sample][0][:3, 3].reshape(-1)
                 R = data["poses"][idx_sample][0][:3, :3].reshape(-1)
