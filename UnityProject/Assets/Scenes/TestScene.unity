@@ -146,11 +146,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 373557376}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 218537cd51fd67b4f88a208f9dbb70d2, type: 3}
+  m_Script: {fileID: 11500000, guid: 47bfbe241ef793244935d5a6ac095518, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseManager
   target: {fileID: 449560825}
-  confidenceThreshold: 0.9
+  confidenceThreshold: 0.6
   trackingTimeoutSeconds: 0.5
   maxPositionDelta: 0.5
   maxRotationDeltaDeg: 45
@@ -183,13 +183,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 373557376}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a59f28d264654bd48b4cea7fccce5095, type: 3}
+  m_Script: {fileID: 11500000, guid: d75ed5883e44caf4abc091d81488dc64, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseBridge
+  m_EditorClassIdentifier: Napier.SixDofPoseEstimation.Runtime::PoseBridge
   useDummy: 1
-  croppedFrame: {fileID: 0}
+  croppedFrame: {fileID: 2800000, guid: f42e92b78ade0e84ea438480e7e2c07b, type: 3}
   intervalFrames: 10
-  poseManager: {fileID: 373557377}
+  poseManager: {fileID: 0}
 --- !u!1 &449560824
 GameObject:
   m_ObjectHideFlags: 0

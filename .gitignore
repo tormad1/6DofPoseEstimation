@@ -1,0 +1,21 @@
+# Build output
+**/x64/
+**/Debug/
+**/Release/
+**/.vs/
+
+# Visual Studio
+*.user
+*.suo
+*.pdb
+*.ilk
+*.obj
+*.tlog
+
+# Unity
+UnityProject/Assets/test_frame.png
+UnityProject/Assets/test_frame.png.meta
+
+# Python
+__pycache__/
+*.pyc
