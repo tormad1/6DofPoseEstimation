@@ -20,6 +20,3 @@ regressor:
   normalize_output: true
 
 max_batch_size: 64
-
-pretrained_weights: 
-checkpoint_key: state_dict

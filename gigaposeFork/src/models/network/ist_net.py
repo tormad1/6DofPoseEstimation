@@ -1,14 +1,13 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
 from src.utils.batch import BatchedData, gather
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class ISTNet(pl.LightningModule):
+class ISTNet(nn.Module):
     def __init__(
         self,
         model_name,
@@ -26,9 +25,6 @@ class ISTNet(pl.LightningModule):
         self.max_batch_size = max_batch_size
         self._init_weights()
         logger.info("Init for ISTNet done!")
-
-    def get_toUpdate_parameters(self):
-        return list(self.backbone.parameters()) + list(self.regressor.parameters())
 
     def _init_weights(self):
         """Init weights for the MLP"""
@@ -160,25 +156,3 @@ class Regressor(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-
-
-if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(level=logging.INFO)
-    from omegaconf import DictConfig, OmegaConf
-    from hydra.utils import instantiate
-    from hydra.experimental import compose, initialize
-
-    with initialize(config_path="../../../configs/"):
-        cfg = compose(config_name="train.yaml")
-
-    model = instantiate(cfg.model.ist_net)
-    model = model.to("cuda")
-
-    images = torch.rand(2, 3, 224, 224).to(device="cuda")
-    keypoints = torch.rand(2, 256, 2).to(device="cuda")
-    keypoints[keypoints < 0.5] = -1
-    keypoints = keypoints.long()
-    pred = model(images, images, keypoints, keypoints)
-    print(pred)

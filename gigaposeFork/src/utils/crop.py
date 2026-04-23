@@ -1,5 +1,3 @@
-import numpy as np
-import cv2
 import torch
 from src.utils.logging import get_logger
 from src.utils.bbox import BoundingBox
@@ -59,26 +57,3 @@ class CropResizePad:
         out_data["M"] = torch.stack(out_data["M"])
         out_data["images"] = torch.stack(out_data["images"])
         return out_data
-
-    def forward_image_wrap(self, images, M):
-        images_np = images.permute(0, 2, 3, 1).cpu().numpy()
-        M_np = M.cpu().numpy()
-        new_images = [
-            cv2.warpAffine(
-                images_np[i], M_np[i][:2, :], (self.target_size, self.target_size)
-            )
-            for i in range(len(images))
-        ]
-        assert len(new_images) != 0, f"Issue with warpAffine: {new_images}"
-        new_images = torch.from_numpy(np.stack(new_images)).to(images.device)
-        return new_images.permute(0, 3, 1, 2).float()
-
-
-def crop_image(image, bbox, format="xyxy"):
-    if format == "xyxy":
-        image_cropped = image[bbox[1] : bbox[3], bbox[0] : bbox[2], :]
-    elif format == "xywh":
-        image_cropped = image[
-            bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2], :
-        ]
-    return image_cropped

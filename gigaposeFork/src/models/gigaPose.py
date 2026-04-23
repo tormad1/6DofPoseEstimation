@@ -1,49 +1,33 @@
+import hashlib
+import json
 import os
 import os.path as osp
+from pathlib import Path
 import numpy as np
 import torch
-import torch.nn.functional as F
-from torch import nn
-from einops import repeat
-import pytorch_lightning as pl
 from tqdm import tqdm
 import pandas as pd
-from src.utils.logging import get_logger, log_image
-from src.utils.batch import BatchedData, gather
-from src.utils.optimizer import HybridOptim
-from torchvision.utils import save_image
+from src.utils.logging import get_logger
+from src.utils.batch import BatchedData
 from src.utils.time import Timer
-from src.models.loss import cosine_similarity
-from src.lib3d.torch import (
-    cosSin,
-    get_relative_scale_inplane,
-    geodesic_distance,
-)
-from src.libVis.torch import (
-    plot_Kabsch,
-    plot_keypoints_batch,
-    save_tensor_to_image,
-)
 from src.models.poses import ObjectPoseRecovery
-import src.megapose.utils.tensor_collection as tc
+import src.utils.tensor_collection as tc
 from src.utils.inout import save_predictions_from_batched_predictions
 
 logger = get_logger(__name__)
 
 
-class GigaPose(pl.LightningModule):
+class GigaPose(torch.nn.Module):
     def __init__(
         self,
         model_name,
         ae_net,
         ist_net,
-        training_loss,
         testing_metric,
-        optim_config,
-        log_interval,
         log_dir,
         max_num_dets_per_forward=None,
-        test_setting="localization",
+        template_cache_dir=None,
+        template_cache_enabled=True,
         **kwargs,
     ):
         # define the network
@@ -51,24 +35,22 @@ class GigaPose(pl.LightningModule):
         self.model_name = model_name
         self.ae_net = ae_net
         self.ist_net = ist_net
-        self.training_loss = training_loss
         self.testing_metric = testing_metric
 
         self.max_num_dets_per_forward = max_num_dets_per_forward
-        self.test_setting = test_setting # if "localization" filter the predictions, else no filter the predictions
+        self.template_cache_dir = (
+            Path(template_cache_dir) if template_cache_dir is not None else None
+        )
+        self.template_cache_enabled = bool(template_cache_enabled)
+        self.checkpoint_cache_key = None
 
-        self.log_interval = log_interval
         self.log_dir = log_dir
         os.makedirs(self.log_dir, exist_ok=True)
         os.makedirs(osp.join(self.log_dir, "predictions"), exist_ok=True)
 
-        self.optim_config = optim_config
-        self.optim_name = "AdamW"
-
         # for testing
         self.template_datas = {}
         self.pose_recovery = {}
-        self.l2_loss = nn.MSELoss()
         self.timer = Timer()
         self.run_id = None
         self.template_datasets = None
@@ -76,314 +58,52 @@ class GigaPose(pl.LightningModule):
 
         logger.info("Initialize GigaPose done!")
 
-    def warm_up_lr(self):
-        for optim in self.trainer.optimizers:
-            for idx_group, pg in enumerate(optim.param_groups):
-                if len(optim.param_groups) > 1:
-                    lr = self.lr["ae"] if idx_group == 0 else self.lr["ist"]
-                    pg["lr"] = (
-                        self.global_step / float(self.optim_config.warm_up_steps) * lr
-                    )
-                else:
-                    pg["lr"] = (
-                        self.global_step
-                        / float(self.optim_config.warm_up_steps)
-                        * self.lr
-                    )
-            if self.global_step % 50 == 0:
-                logger.info(f"Step={self.global_step}, lr warm up: lr={pg['lr']}")
-
-    def configure_optimizers(self):
-        # define optimizer
-        if self.optim_config.nets_to_train in ["ae", "all"]:
-            logger.info("Optimizer for ae net")
-            ae_optimizer = torch.optim.AdamW(
-                self.ae_net.get_toUpdate_parameters(),
-                self.optim_config.ae_lr,
-                weight_decay=self.optim_config.weight_decay,
-            )
-            self.lr = self.optim_config.ae_lr
-
-        if self.optim_config.nets_to_train in ["ist", "all"]:
-            logger.info("Optimizer for ist net")
-            ist_optimizer = torch.optim.AdamW(
-                self.ist_net.parameters(),
-                self.optim_config.ist_lr,
-                weight_decay=self.optim_config.weight_decay,
-            )
-            self.lr = self.optim_config.ist_lr
-
-        # disable gradient for non-updatable parameters
-        if self.optim_config.nets_to_train != "all":
-            if self.optim_config.nets_to_train == "ae":
-                for param in self.ist_net.parameters():
-                    param.requires_grad = False
-            if self.optim_config.nets_to_train == "ist":
-                for param in self.ae_net.parameters():
-                    param.requires_grad = False
-        else:
-            self.lr = {
-                "ae": self.optim_config.ae_lr,
-                "ist": self.optim_config.ist_lr,
-            }
-        # combine optimizers
-        if self.optim_config.nets_to_train == "all":
-            optimizer = HybridOptim([ae_optimizer, ist_optimizer])
-        elif self.optim_config.nets_to_train == "ae":
-            optimizer = ae_optimizer
-        elif self.optim_config.nets_to_train == "ist":
-            optimizer = ist_optimizer
-        else:
-            raise NotImplementedError
-        assert optimizer is not None
-        return optimizer
-
-    def move_to_device(self):
-        self.ae_net.to(self.device)
-        self.ist_net.to(self.device)
-        logger.info(f"Moving models to {self.device} done!")
-
-    def compute_contrastive_loss(self, batch, split):
-        """
-        Contrastive loss based on corresponding patches
-        - Positive are patches from the same correspondence
-        - Negative are patches from different correspondences
-        """
-        device = batch.src_img.device
-        # get the query and ref features
-        src_feat = self.ae_net(batch.src_img)
-        tar_feat = self.ae_net(batch.tar_img)
-        src_pts = getattr(batch, "src_pts").clone().long()
-        tar_pts = getattr(batch, "tar_pts").clone().long()
-
-        loss = {}
-        # select the corresponding patches
-        src_feat_ = gather(src_feat, src_pts)
-        tar_feat_ = gather(tar_feat, tar_pts)
-        label = torch.arange(src_feat_.shape[0], dtype=torch.long).to(device)
-        loss["infoNCE"] = self.training_loss.contrast_loss(
-            src_feat_,
-            tar_feat_,
-            label,
-        )
-
-        # monitor the similarity between query and ref
-        with torch.no_grad():
-            pos_sim = F.cosine_similarity(src_feat_, tar_feat_, dim=1, eps=1e-8)
-            loss["pos_sim"] = pos_sim.mean()
-
-            neg_sim = cosine_similarity(src_feat_, tar_feat_, normalize=True)
-            loss["neg_sim"] = neg_sim.mean()
-
-        for metric_name, metric_value in loss.items():
-            name = f"{split}/{metric_name}"
-            if metric_name == "infoNCE":
-                prog_bar = True
-            else:
-                prog_bar = False
-            self.log(
-                name,
-                metric_value,
-                sync_dist=True,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=prog_bar,
-            )
-        return loss
-
-    def compute_regression_loss(self, batch, split):
-        """
-        Contrastive loss based on corresponding patches
-        - Positive are patches from the same correspondence
-        - Negative are patches from different correspondences
-        """
-        # get the query and ref features
-        num_patches = batch.src_pts.shape[1]
-        H, W = np.sqrt(num_patches).astype(int), np.sqrt(num_patches).astype(int)
-
-        loss = {}
-        gt_relInplane = getattr(batch, "relInplane")
-        gt_relScale = getattr(batch, "relScale")
-
-        src_pts = getattr(batch, "src_pts").clone().long()
-        tar_pts = getattr(batch, "tar_pts").clone().long()
-
-        preds = self.ist_net(
-            src_img=batch.src_img,
-            tar_img=batch.tar_img,
-            src_pts=src_pts,
-            tar_pts=tar_pts,
-        )
-        if preds["inplane"].shape[0] != src_pts.shape[0]:
-            gt_relInplane = repeat(gt_relInplane, "b -> b 1 H W", H=H, W=W)
-            gt_relInplane = gather(gt_relInplane, src_pts).squeeze(1)
-
-            gt_relScale = repeat(gt_relScale, "b -> b 1 H W", H=H, W=W)
-            gt_relScale = gather(gt_relScale, src_pts).squeeze(1)
-
-        # it is simpler to use l2 loss for warm up to regress correct magnitudes
-        if self.trainer.global_step < self.optim_config.warm_up_steps:
-            loss["inp"] = self.l2_loss(
-                preds["inplane"],
-                cosSin(gt_relInplane),
-            )
-            loss["scale"] = self.l2_loss(preds["scale"], gt_relScale)
-        else:
-            loss["inp"] = self.training_loss.inplane_loss(
-                preds["inplane"],
-                cosSin(gt_relInplane),
-            )
-            loss["scale"] = self.training_loss.scale_loss(preds["scale"], gt_relScale)
-
-        # Visualize the predicted inplane and scale
-        with torch.no_grad():
-            scale_err = torch.abs(preds["scale"].clone() - gt_relScale)
-            loss["scale_err"] = scale_err.mean()
-
-            angle_err = geodesic_distance(preds["inplane"], cosSin(gt_relInplane))
-            loss["angle_err"] = torch.rad2deg(angle_err)
-
-        for metric_name, metric_value in loss.items():
-            name = f"{split}/{metric_name}"
-            if metric_name in ["inp", "scale"]:
-                prog_bar = True
-            else:
-                prog_bar = False
-            self.log(
-                name,
-                metric_value,
-                sync_dist=True,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=prog_bar,
-            )
-        return loss
-
-    def training_step(self, batchs, idx_batch):
-        if self.trainer.global_step < self.optim_config.warm_up_steps:
-            self.warm_up_lr()
-        elif self.trainer.global_step == self.optim_config.warm_up_steps:
-            logger.info(f"Finished warm up, setting lr to {self.lr}")
-
-        loss = 0
-        times = {}
-
-        for idx_dataset, batch in enumerate(batchs):
-            if batch is None:
-                continue
-            if idx_batch % self.log_interval == 0:
-                vis_pts = plot_keypoints_batch(batch)
-                sample_path = f"{self.log_dir}/sample_rank{self.global_rank}.png"
-                save_tensor_to_image(vis_pts, sample_path)
-                log_image(
-                    logger=self.logger,
-                    name=f"vis/train_samples_{idx_dataset}",
-                    path=sample_path,
-                )
-
-            if self.optim_config.nets_to_train in ["ist", "all"]:
-                self.timer.tic()
-                loss_ = self.compute_regression_loss(batch, "train")
-                loss += loss_["scale"] + loss_["inp"]
-                times[f"scale_inp_{idx_dataset}"] = self.timer.toc()
-
-            if self.optim_config.nets_to_train in ["ae", "all"]:
-                self.timer.tic()
-                loss_ = self.compute_contrastive_loss(batch, "train")
-                loss += loss_["infoNCE"]
-                times[f"infoNCE_{idx_dataset}"] = self.timer.toc()
-
-        for time_name, time_value in times.items():
-            self.log(
-                time_name,
-                time_value,
-                sync_dist=True,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=False,
-            )
-
-        self.log(
-            "total",
-            loss,
-            sync_dist=True,
-            on_step=True,
-            on_epoch=False,
-            prog_bar=True,
-        )
-        return loss
-
-    def validate_contrast_loss(self, batch, idx_batch, split):
-        src_feat = self.ae_net(batch.src_img)
-        tar_feat = self.ae_net(batch.tar_img)
-
-        preds = self.testing_metric.val(
-            src_feat=src_feat,
-            tar_feat=tar_feat,
-            src_mask=batch.src_mask,
-            tar_mask=batch.tar_mask,
-        )
-        setattr(batch, "pred_src_pts", preds.src_pts)
-        setattr(batch, "pred_tar_pts", preds.tar_pts)
-
-        # monitor the distance between the gt and the predicted matches for same target patches
-        mask = torch.logical_and(
-            batch.tar_pts[:, :, 1] != -1, batch.pred_tar_pts[:, :, 1] != -1
-        )
-        distance = (batch.tar_pts[mask] - batch.pred_tar_pts[mask]).norm(dim=1).mean()
-        self.log(
-            f"{split}/matching",
-            distance,
-            sync_dist=True,
-            on_step=True,
-            on_epoch=False,
-            prog_bar=True,
-        )
-
-        # visualize matches
-        vis_pts = plot_keypoints_batch(batch, type_data="pred")
-        sample_path = f"{self.log_dir}/{split}_sample_rank{self.global_rank}.png"
-        save_tensor_to_image(vis_pts, sample_path)
-        log_image(
-            logger=self.logger,
-            name=f"vis/{split}_samples",
-            path=sample_path,
-        )
-
-    def validation_step(self, batch, idx_batch):
-        _ = self.compute_regression_loss(batch, "val")
-        _ = self.validate_contrast_loss(batch, idx_batch, "val")
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
     def set_template_data(self, dataset_name):
+        template_dataset = self.template_datasets[dataset_name]
+        cache_meta = self._template_cache_metadata(dataset_name, template_dataset)
+        cache_path = self._template_cache_path(dataset_name, cache_meta)
+        if self._load_template_cache(dataset_name, cache_path, cache_meta):
+            return
+
         logger.info("Initializing template data ...")
         self.timer.tic()
-        template_dataset = self.template_datasets[dataset_name]
-        names = ["rgb", "mask", "K", "M", "poses", "ae_features", "ist_features"]
+        names = ["mask", "K", "M", "poses", "ae_features", "ist_features"]
         template_data = {name: BatchedData(None) for name in names}
 
-        for idx in tqdm(range(len(template_dataset))):
-            for name in names:
-                if name in ["ae_features", "ist_features"]:
-                    continue
-                if name == "rgb":
-                    templates = template_dataset[idx].rgb.to(self.device)
-                    if self.max_num_dets_per_forward is None:
-                        template_data[name].append(templates)
+        with torch.inference_mode():
+            for idx in tqdm(range(len(template_dataset))):
+                sample = template_dataset[idx]
+                templates = sample.rgb.to(self.device)
+                template_data["ae_features"].append(self.ae_net(templates))
+                template_data["ist_features"].append(
+                    self.ist_net.forward_by_chunk(templates)
+                )
 
-                    ae_features = self.ae_net(templates)
-                    template_data["ae_features"].append(ae_features)
+                for name in ("mask", "K", "M", "poses"):
+                    template_data[name].append(getattr(sample, name).to(self.device))
 
-                    ist_features = self.ist_net.forward_by_chunk(templates)
-                    template_data["ist_features"].append(ist_features)
-                else:
-                    tmp = getattr(template_dataset[idx], name)
-                    template_data[name].append(tmp.to(self.device))
-        if self.max_num_dets_per_forward is not None:
-            names.remove("rgb")
         for name in names:
             template_data[name].stack()
             template_data[name] = template_data[name].data
 
+        self._register_template_data(dataset_name, template_data)
+        self._save_template_cache(cache_path, cache_meta, template_data)
+        num_obj = len(template_data["K"])
+        onboarding_time = self.timer.toc() / num_obj
+        self.timer.reset()
+        logger.info(f"Init {dataset_name} done! Avg time={onboarding_time} s/object")
+
+    def warmup_templates(self, dataset_name=None):
+        dataset_name = dataset_name or self.test_dataset_name
+        if dataset_name is None:
+            raise ValueError("dataset_name is required before warming up templates")
+        self.set_template_data(dataset_name)
+
+    def _register_template_data(self, dataset_name, template_data):
         self.template_datas[dataset_name] = tc.PandasTensorCollection(
             infos=pd.DataFrame(), **template_data
         )
@@ -392,17 +112,82 @@ class GigaPose(pl.LightningModule):
             template_Ms=template_data["M"],
             template_poses=template_data["poses"],
         )
-        num_obj = len(template_data["K"])
-        onboarding_time = self.timer.toc() / num_obj
-        self.timer.reset()
-        logger.info(f"Init {dataset_name} done! Avg time={onboarding_time} s/object")
 
-    def filter_and_save(
+    def _template_cache_metadata(self, dataset_name, template_dataset):
+        object_templates = template_dataset.template_dataset.list_object_templates
+        template_items = [
+            {
+                "label": template.label,
+                "num_templates": template.num_templates,
+                "pose_path": template.pose_path,
+                "template_dir": template.template_dir,
+            }
+            for template in object_templates
+        ]
+        crop_transform = getattr(template_dataset.transforms, "crop_transform", None)
+        return {
+            "version": 1,
+            "dataset_name": dataset_name,
+            "model_name": self.model_name,
+            "ae_model_name": getattr(self.ae_net, "model_name", None),
+            "ist_model_name": getattr(self.ist_net, "model_name", None),
+            "checkpoint": self.checkpoint_cache_key,
+            "crop_target_size": getattr(crop_transform, "target_size", None),
+            "patch_size": getattr(self.ae_net, "patch_size", None),
+            "objects": template_items,
+        }
+
+    def _template_cache_path(self, dataset_name, cache_meta):
+        if not self.template_cache_enabled or self.template_cache_dir is None:
+            return None
+        encoded_meta = json.dumps(cache_meta, sort_keys=True).encode("utf-8")
+        digest = hashlib.sha256(encoded_meta).hexdigest()[:16]
+        return self.template_cache_dir / f"{dataset_name}_{self.model_name}_{digest}.pt"
+
+    def _load_template_cache(self, dataset_name, cache_path, cache_meta):
+        if cache_path is None or not cache_path.exists():
+            return False
+        try:
+            try:
+                payload = torch.load(
+                    cache_path,
+                    map_location=self.device,
+                    weights_only=False,
+                )
+            except TypeError:
+                payload = torch.load(cache_path, map_location=self.device)
+            if payload.get("meta") != cache_meta:
+                return False
+            template_data = {
+                name: tensor.to(self.device)
+                for name, tensor in payload["tensors"].items()
+            }
+            self._register_template_data(dataset_name, template_data)
+            logger.info(f"Loaded template data cache from {cache_path}")
+            return True
+        except Exception as exc:
+            logger.warning(f"Failed to load template cache {cache_path}: {exc}")
+            return False
+
+    def _save_template_cache(self, cache_path, cache_meta, template_data):
+        if cache_path is None:
+            return
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tensors = {
+                name: tensor.detach().cpu()
+                for name, tensor in template_data.items()
+            }
+            torch.save({"meta": cache_meta, "tensors": tensors}, cache_path)
+            logger.info(f"Saved template data cache to {cache_path}")
+        except Exception as exc:
+            logger.warning(f"Failed to save template cache {cache_path}: {exc}")
+
+    def attach_test_metadata(
         self,
         predictions,
         test_list,
         time,
-        save_path,
         keep_only_testing_instances=True,
     ):
         labels = np.asarray(predictions.infos.label).astype(np.int32)
@@ -422,6 +207,9 @@ class GigaPose(pl.LightningModule):
                 detection_times.extend(
                     [test_list.infos.detection_time[idx] for _ in range(num_inst)]
                 )
+        else:
+            selected_idxs = np.arange(len(labels)).tolist()
+            detection_times = [0 for _ in selected_idxs]
         predictions = predictions[selected_idxs]
 
         detection_times = np.array(detection_times)
@@ -431,10 +219,19 @@ class GigaPose(pl.LightningModule):
         time = torch.ones_like(detection_times) * time
         predictions.register_tensor("detection_time", detection_times)
         predictions.register_tensor("time", time)
+        return selected_idxs, predictions
 
+    def save_batch_predictions(self, predictions, save_path):
         scene_id = np.asarray(predictions.infos.scene_id).astype(np.int32)
         im_id = np.asarray(predictions.infos.view_id).astype(np.int32)
         label = np.asarray(predictions.infos.label).astype(np.int32)
+        poses = predictions.pred_poses
+        scores = predictions.scores
+
+        if poses.ndim == 4 and poses.shape[1] == 1:
+            poses = poses[:, 0]
+        if scores.ndim == 2 and scores.shape[1] == 1:
+            scores = scores[:, 0]
 
         np.savez(
             save_path,
@@ -443,49 +240,35 @@ class GigaPose(pl.LightningModule):
             object_id=label,
             time=predictions.time.cpu().numpy(),
             detection_time=predictions.detection_time.cpu().numpy(),
-            poses=predictions.pred_poses.cpu().numpy(),
-            scores=predictions.scores.cpu().numpy(),
+            poses=poses.cpu().numpy(),
+            scores=scores.cpu().numpy(),
         )
+
+    def filter_and_save(
+        self,
+        predictions,
+        test_list,
+        time,
+        save_path,
+        keep_only_testing_instances=True,
+    ):
+        selected_idxs, predictions = self.attach_test_metadata(
+            predictions=predictions,
+            test_list=test_list,
+            time=time,
+            keep_only_testing_instances=keep_only_testing_instances,
+        )
+        self.save_batch_predictions(predictions, save_path)
         return selected_idxs, predictions
 
-    def vis_retrieval(
-        self, template_data, batch, selected_idxs, predictions, idx_batch
-    ):
-        device = template_data.rgb.device
-        idx_sample = torch.arange(0, predictions.id_src.shape[0], device=device)
-        tar_label_np = np.asarray(predictions.infos.label).astype(np.int32)
-        tar_label = torch.from_numpy(tar_label_np).to(device)
-
-        src_imgs = template_data.rgb[tar_label - 1]
-        src_masks = template_data.mask[tar_label - 1]
-        tar_img = batch.tar_img[selected_idxs]
-        tar_mask = batch.tar_mask[selected_idxs]
-        pred_imgs = []
-        for idx_k in range(self.testing_metric.k):
-            batch = tc.PandasTensorCollection(
-                infos=pd.DataFrame(),
-                src_img=src_imgs[idx_sample, predictions.id_src[:, idx_k]].clone(),
-                src_mask=src_masks[idx_sample, predictions.id_src[:, idx_k]].clone(),
-                tar_img=tar_img,
-                tar_mask=tar_mask,
-                src_pts=predictions.ransac_src_pts[:, idx_k],
-                tar_pts=predictions.ransac_tar_pts[:, idx_k],
-            )
-            keypoint_img = plot_keypoints_batch(batch, concate_input_in_pred=False)
-            wrap_img = plot_Kabsch(batch, predictions.M[:, idx_k])
-            pred_img = torch.cat([keypoint_img, wrap_img], dim=3)
-            pred_imgs.append(pred_img)
-        pred_imgs = torch.cat(pred_imgs, dim=0)
-        return pred_imgs
-
-    def eval_retrieval(
+    def predict_batch(
         self,
         batch,
-        idx_batch,
         dataset_name,
         sort_pred_by_inliers=True,
     ):
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         # prepare template data
         if dataset_name not in self.template_datas:
             self.set_template_data(dataset_name)
@@ -516,8 +299,6 @@ class GigaPose(pl.LightningModule):
             ).astype(np.int32)
             tar_label = torch.from_numpy(tar_label_np).to(device)
 
-            # template data
-            tar_label = torch.ones_like(tar_label)
             if dataset_name == "T282":
                 tar_label = torch.ones_like(tar_label)
             src_ae_features = template_data.ae_features[tar_label - 1]
@@ -532,7 +313,9 @@ class GigaPose(pl.LightningModule):
                 tar_mask=batch.tar_mask[idx_sample],
                 max_batch_size=None,
             )
-            predictions_.infos = batch.infos
+            predictions_.infos = batch.infos.iloc[idx_sample.cpu().numpy()].reset_index(
+                drop=True
+            )
             if idx_sub_batch == 0:
                 predictions = predictions_
             else:
@@ -547,7 +330,7 @@ class GigaPose(pl.LightningModule):
         self.timer.tic()
         for idx_k in range(k):
             idx_sample = torch.arange(0, B, device=device)
-            idx_views = [idx_sample, predictions.id_src[:, idx_k]]
+            idx_views = (idx_sample, predictions.id_src[:, idx_k])
 
             tar_label_np = np.asarray(batch.infos.label).astype(np.int32)
             tar_label = torch.from_numpy(tar_label_np).to(device)
@@ -612,32 +395,26 @@ class GigaPose(pl.LightningModule):
         times["final_step"] = self.timer.toc()
         self.timer.reset()
         total_time = sum(times.values())
+        return predictions, total_time
 
+    def eval_retrieval(
+        self,
+        batch,
+        idx_batch,
+        dataset_name,
+        sort_pred_by_inliers=True,
+    ):
+        predictions, total_time = self.predict_batch(
+            batch=batch,
+            dataset_name=dataset_name,
+            sort_pred_by_inliers=sort_pred_by_inliers,
+        )
         save_path = osp.join(self.log_dir, "predictions", f"{idx_batch}.npz")
         selected_idxs, predictions = self.filter_and_save(
             predictions, test_list=batch.test_list, time=total_time, save_path=save_path
         )
-        if self.log_interval > 0 and idx_batch % self.log_interval == 0 and self.max_num_dets_per_forward is None:
-            vis_img = self.vis_retrieval(
-                template_data=template_data,
-                batch=batch,
-                selected_idxs=selected_idxs,
-                predictions=predictions,
-                idx_batch=idx_batch,
-            )
-            sample_path = f"{self.log_dir}/retrieved_sample_rank{self.global_rank}_{idx_batch}.png"
-            save_image(
-                vis_img,
-                sample_path,
-                nrow=predictions.id_src.shape[0],
-            )
-            log_image(
-                logger=self.logger,
-                name=f"{dataset_name}",
-                path=sample_path,
-            )
-
-    @torch.no_grad()
+        return selected_idxs, predictions
+    @torch.inference_mode()
     def test_step(self, batch, idx_batch):
         self.eval_retrieval(
             batch,
@@ -647,12 +424,10 @@ class GigaPose(pl.LightningModule):
         return 0
 
     def on_test_epoch_end(self):
-        if self.global_rank == 0:
-            prediction_dir = osp.join(self.log_dir, "predictions")
-            save_predictions_from_batched_predictions(
-                prediction_dir,
-                dataset_name=self.test_dataset_name,
-                model_name=self.model_name,
-                run_id=self.run_id,
-                is_refined=False,
-            )
+        prediction_dir = osp.join(self.log_dir, "predictions")
+        save_predictions_from_batched_predictions(
+            prediction_dir,
+            dataset_name=self.test_dataset_name,
+            model_name=self.model_name,
+            run_id=self.run_id,
+        )

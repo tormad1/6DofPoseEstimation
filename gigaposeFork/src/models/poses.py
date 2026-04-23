@@ -1,9 +1,9 @@
 import torch
 from einops import rearrange, repeat
-from megapose.utils.logging import get_logger
+from src.utils.logging import get_logger
 from src.lib3d.torch import inverse_affine, normalize_affine_transform
 from src.models.ransac import RANSAC
-import src.megapose.utils.tensor_collection as tc
+import src.utils.tensor_collection as tc
 import pandas as pd
 
 logger = get_logger(__name__)
@@ -95,7 +95,7 @@ class ObjectPoseRecovery(torch.nn.Module):
 
         # combine 2D translation and Z scale
         query_translation = torch.matmul(inv_query_Ks, query_center2d).squeeze(-1)
-        query_translation /= query_translation[:, :, 2].unsqueeze(-1)
+        query_translation = query_translation / query_translation[:, :, 2].unsqueeze(-1)
         pred_poses[:, :, :3, 3] = query_translation * query_z.unsqueeze(-1)
 
         return pred_poses

@@ -1,4 +1,2 @@
-wandb_api_key: 
-wandb_project_name: gigapose
 local_root_dir: ./gigaPose_datasets
-slurm_root_dir: ./gigaPose_datasets
+dinov2_repo_dir: ./dinov2

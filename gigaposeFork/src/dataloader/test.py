@@ -1,168 +1,99 @@
 from __future__ import annotations
 
-# Standard Library
-import os
-import time
-from dataclasses import dataclass
-from typing import Any, Dict, List, Union
+import json
+from typing import List
 
 # Third Party
 from pathlib import Path
 import pandas as pd
 import numpy as np
 import torch
-from tqdm import tqdm
+from PIL import Image
+from torch.utils.data import Dataset
 
 # MegaPose
-import src.megapose.utils.tensor_collection as tc
-from src.megapose.utils.tensor_collection import PandasTensorCollection
-from src.megapose.datasets.scene_dataset import SceneObservation, ObjectData
-from src.custom_megapose.web_scene_dataset import (
-    WebSceneDataset,
+import src.utils.tensor_collection as tc
+from src.custom_megapose.transform import Transform
+from src.dataloader.scene import (
+    CameraData,
+    ObjectData,
+    ObservationInfos,
+    SceneObservation,
 )
-from src.custom_megapose.web_scene_dataset import IterableWebSceneDataset
-from src.custom_megapose.template_dataset import TemplateDataset, NearestTemplateFinder
-from src.dataloader.keypoints import KeyPointSampler
-from bop_toolkit_lib import inout
-from src.dataloader.train import GigaPoseTrainSet
+from src.utils.bbox import BoundingBox
 from src.utils.logging import get_logger
-from src.utils.inout import (
-    load_test_list_and_cnos_detections,
-    load_test_list_and_init_locs,
-)
-from bop_toolkit_lib import pycoco_utils
+from src.utils.inout import load_test_list_and_cnos_detections
 from src.utils.dataset import LMO_ID_to_index
-from src.lib3d.numpy import matrix4x4
 
 logger = get_logger(__name__)
-ListBbox = List[int]
-ListPose = List[List[float]]
-SceneObservationTensorCollection = PandasTensorCollection
-
-SingleDataJsonType = Union[str, float, ListPose, int, ListBbox, Any]
-DataJsonType = Union[Dict[str, SingleDataJsonType], List[SingleDataJsonType]]
 
 
-@dataclass
-class GigaPoseTestSet(GigaPoseTrainSet):
-    def __init__(
-        self,
-        batch_size,
-        root_dir,
-        dataset_name,
-        depth_scale,
-        template_config,
-        transforms,
-        test_setting,
-        load_gt=True,
-        init_loc_path=None,  # for refinement
-    ):
-        split, model_name = self.get_split_name(dataset_name)
-        self.batch_size = batch_size
+class BOPSceneDataset(Dataset):
+    def __init__(self, root_dir: Path, dataset_name: str, image_keys: List[str]):
         self.root_dir = Path(root_dir)
         self.dataset_name = dataset_name
+        self.scene_root = self.root_dir / self.dataset_name / "test_scenewise"
+        self.image_keys = sorted(image_keys, key=_image_key_sort_key)
+        self._camera_cache = {}
+
+        if not self.scene_root.exists():
+            raise FileNotFoundError(f"Missing scene directory: {self.scene_root}")
+
+    def __len__(self):
+        return len(self.image_keys)
+
+    def __getitem__(self, index):
+        image_key = self.image_keys[index]
+        scene_id, im_id = [int(part) for part in image_key.split("_")]
+        scene_dir = self.scene_root / f"{scene_id:06d}"
+
+        rgb_path = self._find_rgb_path(scene_dir, im_id)
+        rgb = np.array(Image.open(rgb_path).convert("RGB"))
+
+        camera = self._load_camera(scene_dir, im_id)
+        if "cam_R_w2c" in camera:
+            R = np.asarray(camera["cam_R_w2c"], dtype=np.float32).reshape(3, 3)
+            t = np.asarray(camera["cam_t_w2c"], dtype=np.float32).reshape(3)
+        else:
+            R = np.eye(3, dtype=np.float32)
+            t = np.zeros(3, dtype=np.float32)
+
+        return SceneObservation(
+            rgb=rgb,
+            infos=ObservationInfos(scene_id=str(scene_id), view_id=str(im_id)),
+            object_datas=[],
+            camera_data=CameraData(
+                K=np.asarray(camera["cam_K"], dtype=np.float32).reshape(3, 3),
+                TWC=Transform(R, t),
+                resolution=rgb.shape[:2],
+            ),
+            binary_masks={},
+        )
+
+    def _load_camera(self, scene_dir: Path, im_id: int):
+        scene_id = scene_dir.name
+        if scene_id not in self._camera_cache:
+            camera_path = scene_dir / "scene_camera.json"
+            self._camera_cache[scene_id] = json.loads(camera_path.read_text())
+
+        cameras = self._camera_cache[scene_id]
+        return cameras.get(str(im_id)) or cameras[f"{im_id:06d}"]
+
+    def _find_rgb_path(self, scene_dir: Path, im_id: int) -> Path:
+        for image_dir in ("rgb", "gray"):
+            for suffix in (".png", ".jpg", ".jpeg", ".tif", ".tiff"):
+                path = scene_dir / image_dir / f"{im_id:06d}{suffix}"
+                if path.exists():
+                    return path
+        raise FileNotFoundError(f"Missing RGB image for scene={scene_dir.name} im={im_id}")
+
+
+class FrameBatchBuilder:
+    def __init__(self, dataset_name, transforms, test_list, cnos_dets):
+        self.dataset_name = dataset_name
         self.transforms = transforms
-        if self.transforms.rgb_augmentation:
-            self.transforms.rgb_transform.transform = [
-                transform for transform in self.transforms.rgb_transform.transform
-            ]
-
-        # load the dataset
-        webdataset_dir = self.root_dir / self.dataset_name
-        web_dataset = WebSceneDataset(webdataset_dir / split, depth_scale=depth_scale, load_depth=False)
-        self.web_dataloader = IterableWebSceneDataset(web_dataset, set_length=True)
-
-        # load the template dataset
-        model_infos = inout.load_json(
-            self.root_dir / self.dataset_name / model_name / "models_info.json"
-        )
-        model_infos = [{"obj_id": int(obj_id)} for obj_id in model_infos.keys()]
-
-        template_config.dir += f"/{dataset_name}"
-        self.template_dataset = TemplateDataset.from_config(
-            model_infos, template_config
-        )
-        self.template_finder = NearestTemplateFinder(template_config)
-
-        # depending on setting:
-        # 1. localization: load target_objects
-        # 2. detection: not target_objects
-        assert test_setting in [
-            "localization",
-            "detection",
-        ], f"{test_setting} not supported!"
-        self.load_detections(test_setting=test_setting)
-        if init_loc_path is not None:
-            self.load_init_loc(init_loc_path, test_setting)
-            logger.info("Loaded init loc for refinement!")
-        self.load_gt = load_gt
-
-        # keypoint sampler
-        self.keypoint_sampler = KeyPointSampler()
-
-    def load_detections(self, test_setting):
-        if test_setting == "localization":
-            max_det_per_object_id = 32 if self.dataset_name == "icbin" else 16
-        else:
-            max_det_per_object_id = None
-        self.test_list, self.cnos_dets = load_test_list_and_cnos_detections(
-            self.root_dir,
-            self.dataset_name,
-            test_setting,
-            max_det_per_object_id=max_det_per_object_id,
-        )
-
-    def load_init_loc(self, init_loc_path, test_setting, min_score=0.25):
-        (
-            self.test_list,
-            self.init_locs,
-            self.num_hypothesis,
-        ) = load_test_list_and_init_locs(
-            self.root_dir, self.dataset_name, init_loc_path, test_setting
-        )
-        new_init_locs = {}
-        init_number_locs, filtered_number_locs = 0, 0
-        # drop instance_id having low confidence score
-        for image_key in tqdm(self.init_locs, desc="Filtering init locs"):
-            image_locs = self.init_locs[image_key]
-            init_number_locs += len(image_locs)
-            # group by instance_id
-            image_locs_by_instance_id = {}
-            for loc in image_locs:
-                instance_id = loc["instance_id"]
-                if instance_id not in image_locs_by_instance_id:
-                    image_locs_by_instance_id[instance_id] = []
-                image_locs_by_instance_id[instance_id].append(loc)
-
-            new_image_locs = []
-            for instance_id in image_locs_by_instance_id:
-                locs = image_locs_by_instance_id[instance_id]
-                best_score = max([loc["score"] for loc in locs])
-                if best_score < min_score:
-                    continue
-                new_image_locs.extend(locs)
-                filtered_number_locs += len(locs)
-            if len(new_image_locs) == 0:
-                logger.warning(f"Image key {image_key} has no locs!")
-                new_image_locs = image_locs
-            new_init_locs[image_key] = new_image_locs
-        self.init_locs = new_init_locs
-        logger.info(f"Drop from {init_number_locs} to {filtered_number_locs} locs!")
-        if self.num_hypothesis == 1:
-            self.instance_id_counter = 0
-        logger.info(f"Loaded {self.num_hypothesis} init locs!")
-
-    def get_split_name(self, dataset_name):
-        if dataset_name in ["hb", "tless"]:
-            split = "test_primesense"
-        else:
-            split = "test"
-        logger.info(f"Split: {split} for {dataset_name}!")
-        if dataset_name in ["tless"]:
-            model_name = "models_cad"
-        else:
-            model_name = "models"
-        return split, model_name
+        self.test_list = test_list
+        self.cnos_dets = cnos_dets
 
     def load_test_list(self, batch: List[SceneObservation]):
         target_lists = []
@@ -208,35 +139,22 @@ class GigaPoseTestSet(GigaPoseTrainSet):
             scene_id, im_id = int(infos.scene_id), int(infos.view_id)
             image_key = f"{scene_id:06d}_{im_id:06d}"
             dets = self.cnos_dets[image_key]
-            if len(scene_obs.object_datas) == 0:
-                gt_available = False
-            else:
-                gt_available = True
-                gt_mapping = {
-                    obj_data.label: obj_data for obj_data in scene_obs.object_datas
-                }
             object_datas = []
             binary_masks = {}
             for idx, det in enumerate(dets):
                 data = {}
-                # use confidence score as visibility
-                data["visib_fract"] = det["score"]
+                data["visib_fract"] = det.get("score", 1.0)
                 data["bbox_modal"] = det["bbox"]
                 data["bbox_amodal"] = det["bbox"]
-                data["label"] = str(det["category_id"])
+                data["label"] = str(det.get("category_id", det.get("obj_id")))
                 data["unique_id"] = f"{idx+1}"
-
-                if gt_available and data["label"] in gt_mapping:
-                    obj_data = gt_mapping[data["label"]]
-                    data["TWO"] = obj_data.TWO._T
-                else:
-                    data["TWO"] = [[1, 0, 0, 0], [0, 0, 0]]
+                data["TWO"] = [[0, 0, 0, 1], [0, 0, 0]]
                 object_data = ObjectData.from_json(data)
                 object_datas.append(object_data)
 
-                # load mask
-                binary_mask = pycoco_utils.rle_to_binary_mask(det["segmentation"])
-                binary_masks[object_data.unique_id] = binary_mask
+                binary_masks[object_data.unique_id] = detection_to_mask(
+                    det, scene_obs.rgb.shape[:2]
+                )
             scene_obs.object_datas = object_datas
             scene_obs.binary_masks = binary_masks
         return batch
@@ -246,203 +164,253 @@ class GigaPoseTestSet(GigaPoseTrainSet):
         test_obj_ids = test_list.infos.obj_id
         assert np.allclose(np.unique(labels), np.unique(test_obj_ids))
 
+    def process_real(self, batch):
+        rgb = batch["rgb"] / 255.0
+        detections = batch["gt_detections"]
+        data = batch["gt_data"]
+
+        bboxes = BoundingBox(detections.bboxes, "xywh")
+        idx_selected = np.arange(len(detections.bboxes))
+        bboxes = bboxes.reset(idx_selected)
+
+        batch_im_id = detections[idx_selected].infos.batch_im_id
+        masks = data.masks[idx_selected]
+        K = data.K[idx_selected].float()
+        rgb = rgb[batch_im_id]
+        masked_rgba = torch.cat([rgb * masks[:, None, :, :], masks[:, None, :, :]], dim=1)
+        cropped_data = self.transforms.crop_transform(bboxes.xyxy_box, images=masked_rgba)
+
+        return tc.PandasTensorCollection(
+            K=K,
+            rgb=cropped_data["images"][:, :3],
+            mask=cropped_data["images"][:, -1],
+            M=cropped_data["M"],
+            infos=data[idx_selected].infos,
+        )
+
     def collate_fn(
         self,
         batch: List[SceneObservation],
     ):
-        gt_available = False if self.dataset_name in ["hb", "itodd"] else True
-        load_gt = gt_available and self.load_gt
-
-        # load test list
         test_list = self.load_test_list(batch)
-
-        # add detections for each scene id
-        if not load_gt:
-            batch = self.add_detections(batch)
-
-        # convert to tensor collection
+        batch = self.add_detections(batch)
         batch = SceneObservation.collate_fn(batch)
+        real_data = self.process_real(batch)
 
-        # load real data
-        real_data = self.process_real(batch, test_mode=True)
+        if "lmo" in self.dataset_name:
+            new_labels = real_data.infos.label
+            real_data.infos.label = [str(LMO_ID_to_index[int(label)]) for label in new_labels]
 
-        if load_gt:
-            # load template data
-            template_data, T_real2temp, T_temp2real = self.process_template(real_data)
-
-            # compute keypoints, template is source, real is target
-            keypoints, rel_data = self.process_keypoints(
-                real_data, template_data, T_real2temp, T_temp2real
-            )
-
-            if "lmo" in self.dataset_name:
-                # workaround for indexing LMO: update object id to be in range(8)
-                new_labels = real_data.infos.label
-                new_labels = [str(LMO_ID_to_index[int(label)]) for label in new_labels]
-                real_data.infos.label = new_labels
-
-            out_data = tc.PandasTensorCollection(
-                src_img=self.transforms.normalize(template_data.rgb),
-                src_mask=template_data.mask,
-                src_K=template_data.K,
-                src_M=template_data.M,
-                src_pts=keypoints["src_pts"],
-                tar_img=self.transforms.normalize(real_data.rgb),
-                tar_mask=real_data.mask,
-                tar_K=real_data.K,
-                tar_M=real_data.M,
-                tar_pose=real_data.pose,
-                tar_pts=keypoints["tar_pts"],
-                relScale=rel_data["relScale"],
-                relInplane=rel_data["relInplane"],
-                infos=real_data.infos,
-                test_list=test_list,
-            )
-        else:
-            if "lmo" in self.dataset_name:
-                # workaround for indexing LMO: update object id to be in range(8)
-                new_labels = real_data.infos.label
-                new_labels = [str(LMO_ID_to_index[int(label)]) for label in new_labels]
-                real_data.infos.label = new_labels
-
-            out_data = tc.PandasTensorCollection(
-                tar_img=self.transforms.normalize(real_data.rgb),
-                tar_mask=real_data.mask,
-                tar_K=real_data.K,
-                tar_M=real_data.M,
-                infos=real_data.infos,
-                test_list=test_list,
-            )
-        if not load_gt:
-            self.double_check_test_list(real_data, test_list)
-        return out_data
-
-    def collate_refine_fn(self, batch: List[SceneObservation]):
-        assert len(batch) == 1, "Only support batch size 1 for refinement!"
-        scene_obs = batch[0]
-        rgb = torch.from_numpy(scene_obs.rgb / 255.0)
-        rgb = rgb.permute(2, 0, 1)
-        rgb = rgb.unsqueeze(0)
-        K = torch.from_numpy(scene_obs.camera_data.K)
-        K = K.unsqueeze(0)
-
-        infos = scene_obs.infos
-        scene_id, im_id = int(infos.scene_id), int(infos.view_id)
-        image_key = f"{scene_id:06d}_{im_id:06d}"
-        if image_key not in self.init_locs:
-            logger.warning(f"Image key {image_key} not in init locs!")
-            out_data = tc.PandasTensorCollection(
-                rgb=rgb.float(),
-                K=K.float(),
-                infos=pd.DataFrame(),
-            )
-        else:
-            init_locs = self.init_locs[image_key]
-            names = [
-                "scene_id",
-                "im_id",
-                "obj_id",
-                "instance_id",
-                "score",
-                "TCO_init",
-                "time",
-            ]
-            data = {name: [] for name in names}
-            for idx_loc, loc in enumerate(init_locs):
-                for name in names:
-                    if name == "TCO_init":
-                        R, t = loc["R"], loc["t"]
-                        TCO = matrix4x4(R, t, scale_translation=0.001)
-                        data["TCO_init"].append(TCO)
-                    # add instance_id in case of multiple hypothesis
-                    elif name == "instance_id":
-                        if self.num_hypothesis > 1:
-                            instance_id = loc[name]
-                        else:
-                            instance_id = self.instance_id_counter
-                            self.instance_id_counter += 1
-                        data["instance_id"].append(instance_id)
-                    else:
-                        data[name].append(loc[name])
-            for name in names:
-                data[name] = np.asarray(data[name])
-
-            data["TCO_init"] = torch.from_numpy(data["TCO_init"])
-
-            infos = pd.DataFrame(
-                dict(
-                    scene_id=data["scene_id"],
-                    im_id=data["im_id"],
-                    matching_score=data["score"],
-                    batch_im_id=np.zeros_like(data["instance_id"]).astype(np.int32),
-                    instance_id=data["instance_id"].astype(np.int32),
-                    label=[f"obj_{obj_id:06d}" for obj_id in data["obj_id"]],
-                    time=data["time"],
-                )
-            )
-
-            out_data = tc.PandasTensorCollection(
-                rgb=rgb.float(),
-                K=K.float(),
-                TCO_init=data["TCO_init"].float(),
-                infos=infos,
-            )
-        return out_data
-
-
-if __name__ == "__main__":
-    import time
-    import torch
-    from hydra.experimental import compose, initialize
-    from torch.utils.data import DataLoader
-    from src.megapose.datasets.scene_dataset import SceneObservation
-    from src.libVis.torch import plot_keypoints_batch, plot_Kabsch
-    from torchvision.utils import save_image
-    from hydra.utils import instantiate
-    from omegaconf import OmegaConf
-    from src.models.ransac import RANSAC
-    import logging
-
-    logging.basicConfig(level=logging.DEBUG)
-    with initialize(config_path="../../configs/"):
-        cfg = compose(config_name="train.yaml")
-    OmegaConf.set_struct(cfg, False)
-
-    init_loc_path = "/home/nguyen/Documents/datasets/gigaPose_datasets/results/large_tudlGigaPose/predictions/large-pbrreal-rgb-mmodel_tudl-test_tudlGigaPose.csv"
-    save_dir = "./tmp"
-    os.makedirs(save_dir, exist_ok=True)
-
-    cfg.machine.batch_size = 1
-    cfg.data.test.dataloader.batch_size = cfg.machine.batch_size
-    cfg.data.test.dataloader.dataset_name = "ycbv"
-    # cfg.data.test.dataloader.init_loc_path = init_loc_path
-    test_dataset = instantiate(cfg.data.test.dataloader)
-
-    dataloader = DataLoader(
-        test_dataset.web_dataloader.datapipeline,
-        batch_size=cfg.machine.batch_size,
-        num_workers=10,
-        collate_fn=test_dataset.collate_fn,
-        # collate_fn=test_dataset.collate_refine_fn,
-    )
-    ransac = RANSAC(pixel_threshold=5)
-    start_time = time.time()
-    for idx, batch in enumerate(dataloader):
-        # batch = batch.cuda()
-        end_time = time.time()
-        print(f"Time: {end_time - start_time}")
-        start_time = end_time
-
-        keypoint_img = plot_keypoints_batch(batch, concate_input_in_pred=False)
-        batch.relScale = batch.relScale.unsqueeze(1).repeat(1, 256)
-        batch.relInplane = batch.relInplane.unsqueeze(1).repeat(1, 256)
-
-        # vis relative scale and inplane
-        M, idx_failed, _ = ransac(batch)
-        wrap_img = plot_Kabsch(batch, M)
-        vis_img = torch.cat([keypoint_img, wrap_img], dim=3)
-        save_image(
-            vis_img,
-            os.path.join(save_dir, f"{idx:06d}.png"),
-            nrow=4,
+        out_data = tc.PandasTensorCollection(
+            tar_img=self.transforms.normalize(real_data.rgb),
+            tar_mask=real_data.mask,
+            tar_K=real_data.K,
+            tar_M=real_data.M,
+            infos=real_data.infos,
+            test_list=test_list,
         )
+        self.double_check_test_list(real_data, test_list)
+        return out_data
+
+
+class GigaPoseTestSet:
+    def __init__(
+        self,
+        batch_size,
+        root_dir,
+        dataset_name,
+        template_config,
+        transforms,
+        test_setting,
+    ):
+        self.batch_size = batch_size
+        self.root_dir = Path(root_dir)
+        self.dataset_name = dataset_name
+        self.transforms = transforms
+
+        # depending on setting:
+        # 1. localization: load target_objects
+        # 2. detection: not target_objects
+        assert test_setting in [
+            "localization",
+            "detection",
+        ], f"{test_setting} not supported!"
+        self.load_detections(test_setting=test_setting)
+        self.scene_dataset = BOPSceneDataset(
+            root_dir=self.root_dir,
+            dataset_name=self.dataset_name,
+            image_keys=list(self.test_list.keys()),
+        )
+        self.batch_builder = FrameBatchBuilder(
+            dataset_name=self.dataset_name,
+            transforms=self.transforms,
+            test_list=self.test_list,
+            cnos_dets=self.cnos_dets,
+        )
+
+    def load_detections(self, test_setting):
+        if test_setting == "localization":
+            max_det_per_object_id = 32 if self.dataset_name == "icbin" else 16
+        else:
+            max_det_per_object_id = None
+        self.test_list, self.cnos_dets = load_test_list_and_cnos_detections(
+            self.root_dir,
+            self.dataset_name,
+            test_setting,
+            max_det_per_object_id=max_det_per_object_id,
+        )
+
+    def collate_fn(
+        self,
+        batch: List[SceneObservation],
+    ):
+        return self.batch_builder.collate_fn(batch)
+
+
+def decode_binary_mask(segmentation):
+    try:
+        from pycocotools import mask as coco_mask
+    except ImportError as exc:
+        raise ImportError(
+            "pycocotools is required for COCO RLE segmentation masks. "
+            "Pass a binary mask or bbox-only detection to avoid this dependency."
+        ) from exc
+
+    rle = dict(segmentation)
+    if isinstance(rle.get("counts"), str):
+        rle["counts"] = rle["counts"].encode("ascii")
+    return coco_mask.decode(rle).astype(bool)
+
+
+def detection_to_mask(detection, image_shape):
+    x, y, w, h = [int(round(v)) for v in detection["bbox"]]
+    x0, y0 = max(x, 0), max(y, 0)
+    x1, y1 = min(x + w, image_shape[1]), min(y + h, image_shape[0])
+
+    if "mask" in detection:
+        mask = np.asarray(detection["mask"]).astype(bool)
+        if mask.ndim != 2:
+            raise ValueError("detection mask must be a 2D array")
+        if tuple(mask.shape) == tuple(image_shape):
+            return mask
+
+        full_mask = np.zeros(image_shape, dtype=bool)
+        roi_h = max(y1 - y0, 0)
+        roi_w = max(x1 - x0, 0)
+        mask_roi = mask[:roi_h, :roi_w]
+        full_mask[
+            y0 : y0 + mask_roi.shape[0],
+            x0 : x0 + mask_roi.shape[1],
+        ] = mask_roi
+        return full_mask
+
+    if "segmentation" in detection:
+        return decode_binary_mask(detection["segmentation"])
+
+    mask = np.zeros(image_shape, dtype=bool)
+    mask[y0:y1, x0:x1] = True
+    return mask
+
+
+def make_scene_observation(rgb, K, scene_id=1, im_id=1):
+    rgb = np.asarray(rgb, dtype=np.uint8)
+    if rgb.ndim != 3 or rgb.shape[2] != 3:
+        raise ValueError("rgb must be a uint8 HxWx3 array")
+
+    return SceneObservation(
+        rgb=rgb,
+        infos=ObservationInfos(scene_id=str(scene_id), view_id=str(im_id)),
+        object_datas=[],
+        camera_data=CameraData(
+            K=np.asarray(K, dtype=np.float32).reshape(3, 3),
+            TWC=Transform(np.eye(3, dtype=np.float32), np.zeros(3, dtype=np.float32)),
+            resolution=rgb.shape[:2],
+        ),
+        binary_masks={},
+    )
+
+
+def make_test_list_from_detections(detections, scene_id=1, im_id=1):
+    counts = {}
+    for detection in detections:
+        obj_id = int(detection.get("category_id", detection.get("obj_id")))
+        counts[obj_id] = counts.get(obj_id, 0) + 1
+
+    return [
+        {
+            "scene_id": int(scene_id),
+            "im_id": int(im_id),
+            "obj_id": obj_id,
+            "inst_count": inst_count,
+        }
+        for obj_id, inst_count in counts.items()
+    ]
+
+
+def normalize_detections(detections):
+    """Validate and normalize ROI detections for direct frame inference.
+
+    Each detection needs:
+      - ``bbox``: xywh pixels, with positive width and height.
+      - ``category_id`` or ``obj_id``: object id used by the templates.
+
+    Optional keys are ``score``, ``time``, ``mask`` and COCO ``segmentation``.
+    The returned dictionaries always include ``category_id``, ``score`` and
+    ``time``.
+    """
+    normalized = []
+    if detections is None:
+        return normalized
+
+    for detection in detections:
+        detection = dict(detection)
+        if "bbox" not in detection:
+            raise ValueError("each detection must include bbox in xywh format")
+        bbox = np.asarray(detection["bbox"], dtype=np.float32).reshape(-1)
+        if bbox.shape[0] != 4:
+            raise ValueError("detection bbox must contain four values: x, y, w, h")
+        if bbox[2] <= 0 or bbox[3] <= 0:
+            raise ValueError("detection bbox width and height must be positive")
+        detection["bbox"] = [float(value) for value in bbox]
+
+        if "category_id" not in detection and "obj_id" in detection:
+            detection["category_id"] = detection["obj_id"]
+        if "category_id" not in detection:
+            raise ValueError("each detection must include category_id or obj_id")
+        detection["category_id"] = int(detection["category_id"])
+
+        if "score" not in detection:
+            detection["score"] = 1.0
+        detection["score"] = float(detection["score"])
+        if "time" not in detection:
+            detection["time"] = 0.0
+        detection["time"] = float(detection["time"])
+        normalized.append(detection)
+    return normalized
+
+
+def build_frame_batch(
+    rgb,
+    K,
+    detections,
+    transforms,
+    dataset_name="custom",
+    scene_id=1,
+    im_id=1,
+):
+    """Build the tensor batch used by GigaPose from one RGB frame and detections."""
+    image_key = f"{int(scene_id):06d}_{int(im_id):06d}"
+    detections = normalize_detections(detections)
+    builder = FrameBatchBuilder(
+        dataset_name=dataset_name,
+        transforms=transforms,
+        test_list={image_key: make_test_list_from_detections(detections, scene_id, im_id)},
+        cnos_dets={image_key: detections},
+    )
+    observation = make_scene_observation(rgb, K, scene_id=scene_id, im_id=im_id)
+    return builder.collate_fn([observation])
+
+
+def _image_key_sort_key(image_key):
+    scene_id, im_id = image_key.split("_")
+    return int(scene_id), int(im_id)
