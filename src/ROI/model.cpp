@@ -1,6 +1,7 @@
 #include <onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <fstream>
 #include <optional>
 
 #include "crop.hpp"
@@ -160,6 +161,7 @@ std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int orig
         float w = data[2 * numBoxes + i];
         float h = data[3 * numBoxes + i];
 
+
         // Convert from letterboxed 640x640 back to original image coords
         float x1 = (cx - w / 2.0f - padX) / scale;
         float y1 = (cy - h / 2.0f - padY) / scale;
@@ -200,6 +202,20 @@ std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int orig
             << " score=" << d.score
             << " box=" << d.box << std::endl;
     }
+
+
+
+	// Top left corner of the box is (x,y).
+    std::ofstream MyFile("C:\\temp\\box_location.txt");
+    for (auto& d : detections) {
+        float x = d.box.x;
+        float y = d.box.y;
+        float w = d.box.width;
+        float h = d.box.height;        
+
+        MyFile << "x=" << x << ",y=" << y << ",w=" << w << ",h=" << h;
+    }
+    MyFile.close();
 
     return detections;
 }
