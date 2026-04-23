@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-# Standard Library
-import os
-
 # Third Party
 from pathlib import Path
 import pandas as pd
 from torch.utils.data import Dataset
-from bop_toolkit_lib import inout
 from src.utils.dataset import LMO_index_to_ID
-from src.custom_megapose.template_dataset import TemplateDataset, NearestTemplateFinder
+from src.utils.inout import load_json
+from src.custom_megapose.template_dataset import TemplateDataset
 import torch
-import src.megapose.utils.tensor_collection as tc
+import src.utils.tensor_collection as tc
 
 
 class TemplateSet(Dataset):
@@ -31,16 +28,13 @@ class TemplateSet(Dataset):
         cad_name = self.get_cad_name(dataset_name)
 
         # load the template dataset
-        model_infos = inout.load_json(
-            self.root_dir / self.dataset_name / cad_name / "models_info.json"
-        )
+        model_infos = load_json(self.root_dir / self.dataset_name / cad_name / "models_info.json")
         self.model_infos = [{"obj_id": int(obj_id)} for obj_id in model_infos.keys()]
 
-        template_config.dir += f"/{dataset_name}"
+        template_config.dir = str(Path(template_config.dir) / dataset_name)
         self.template_dataset = TemplateDataset.from_config(
             self.model_infos, template_config
         )
-        self.template_finder = NearestTemplateFinder(template_config)
 
     def get_cad_name(self, dataset_name):
         if dataset_name in ["tless"]:
@@ -79,33 +73,3 @@ class TemplateSet(Dataset):
             infos=pd.DataFrame(),
         )
         return out_data
-
-
-if __name__ == "__main__":
-    from tqdm import tqdm
-    from hydra.experimental import compose, initialize
-    from hydra.utils import instantiate
-    from omegaconf import OmegaConf
-    from src.libVis.torch import inv_rgb_transform
-    from torchvision.utils import save_image
-
-    with initialize(config_path="../../configs/"):
-        cfg = compose(config_name="test.yaml")
-    OmegaConf.set_struct(cfg, False)
-
-    save_dir = "./tmp"
-    os.makedirs(save_dir, exist_ok=True)
-
-    cfg.machine.batch_size = 9
-    cfg.data.test.dataloader.dataset_name = "ycbv"
-    cfg.data.test.dataloader._target_ = "src.dataloader.template.TemplateSet"
-    template_dataset = instantiate(cfg.data.test.dataloader)
-    for idx_batch in tqdm(range(len(template_dataset))):
-        data = template_dataset[idx_batch]
-        templates = data.rgb
-        templates = inv_rgb_transform(templates)
-        save_image(
-            templates,
-            os.path.join(save_dir, f"{idx_batch:06d}.png"),
-            nrow=16,
-        )

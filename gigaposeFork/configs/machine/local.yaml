@@ -2,12 +2,10 @@ name: local
 
 # specific attributes to this machine
 batch_size: 12
-num_workers: 10
-
-
-# Define trainer, datasets
-defaults:
-  - trainer: local
-
+num_workers: 0
+cpu_threads:
 dryrun: True
 root_dir: ${user.local_root_dir}
+
+trainer:
+  limit_test_batches:

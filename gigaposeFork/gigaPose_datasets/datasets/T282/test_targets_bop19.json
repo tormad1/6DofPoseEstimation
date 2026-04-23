@@ -1,0 +1,44 @@
+[
+  {
+    "scene_id": 1,
+    "im_id": 1,
+    "obj_id": 1,
+    "inst_count": 1
+  },
+  {
+    "scene_id": 1,
+    "im_id": 2,
+    "obj_id": 1,
+    "inst_count": 1
+  },
+  {
+    "scene_id": 1,
+    "im_id": 3,
+    "obj_id": 1,
+    "inst_count": 1
+  },
+  {
+    "scene_id": 1,
+    "im_id": 4,
+    "obj_id": 1,
+    "inst_count": 1
+  },
+  {
+    "scene_id": 1,
+    "im_id": 5,
+    "obj_id": 1,
+    "inst_count": 1
+  },
+  {
+    "scene_id": 1,
+    "im_id": 6,
+    "obj_id": 1,
+    "inst_count": 1
+  },
+  {
+    "scene_id": 1,
+    "im_id": 7,
+    "obj_id": 1,
+    "inst_count": 1
+  }
+]

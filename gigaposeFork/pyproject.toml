@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gigapose-windows-runtime"
+version = "0.1.0"
+description = "Windows CPython runtime wrapper for RGB-only CPU GigaPose inference."
+requires-python = ">=3.9,<3.12"
+
+[tool.setuptools]
+py-modules = ["gigapose_runtime"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

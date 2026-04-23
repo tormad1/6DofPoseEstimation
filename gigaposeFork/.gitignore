@@ -14,7 +14,12 @@ None/
 huggingface/
 tmp/
 .empty/
-
+gigaPose_datasets/pretrained/
+gigaPose_datasets/template_cache/
+gigaPose_datasets/local_templates/
+gigaPose_datasets/datasets/templates/**/*.png
+dinov2/
+_downloads/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

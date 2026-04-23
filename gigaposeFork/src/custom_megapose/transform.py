@@ -15,132 +15,69 @@ limitations under the License.
 """
 
 
-# Standard Library
-from typing import Tuple, Union
-
-# Third Party
 import numpy as np
-import pinocchio as pin
 import torch
 from scipy.spatial.transform import Rotation
 
 
 class Transform:
-    """A representation of a SE(3) object based on pinocchio's pin.SE3."""
+    """Small SE(3) helper for the inference path."""
 
-    def __init__(
-        self,
-        *args: Union[
-            Union[pin.SE3, np.ndarray, torch.Tensor],  # T
-            Union[
-                pin.Quaternion,
-                np.ndarray,
-                torch.Tensor,
-                Tuple[float, float, float, float],
-            ],  # rotation
-            Union[np.ndarray, torch.Tensor, Tuple[float, float, float]],  # translation
-        ]
-    ):
+    def __init__(self, *args):
         """
-        - Transform(T): SE3 or (4, 4) array
-        - Transform(quaternion, translation), where
-            quaternion: pin.Quaternion, 4-array representing a xyzw quaternion,
-                or a 3x3 rotation matrix
-            translation: 3-array
+        - Transform(T): a (4, 4) homogeneous matrix.
+        - Transform(rotation, translation): rotation is a xyzw quaternion or 3x3 matrix.
         """
         if len(args) == 1:
-            arg_T = args[0]
-            if isinstance(arg_T, pin.SE3):
-                self._T = arg_T
-            elif isinstance(arg_T, np.ndarray):
-                assert arg_T.shape == (4, 4)
-                R = arg_T[:3, :3].copy()
-                t = arg_T[:3, -1].copy()
-                self._T = pin.SE3(R, t.reshape(3, 1))
-            elif isinstance(arg_T, torch.Tensor):
-                T = arg_T.detach().cpu().numpy().copy()
-                R = T[:3, :3]
-                t = T[:3, -1]
-                self._T = pin.SE3(R, t.reshape(3, 1))
-            else:
-                raise ValueError
+            T = _to_numpy(args[0])
+            assert T.shape == (4, 4)
+            self._matrix = T.astype(np.float64, copy=True)
+            return
 
-        elif len(args) == 2:
+        if len(args) == 2:
             rotation, translation = args
-            if isinstance(rotation, pin.Quaternion):
-                R = rotation.matrix()
-            elif isinstance(rotation, tuple):
-                rotation_np = np.array(rotation)
-            elif isinstance(rotation, (np.ndarray, torch.Tensor)):
-                if isinstance(rotation, torch.Tensor):
-                    rotation_np = rotation.detach().cpu().numpy().copy()
-                else:
-                    rotation_np = rotation
-            else:
-                raise ValueError
+            rotation_np = _to_numpy(rotation)
 
             if rotation_np.size == 4:
-                quaternion_xyzw = rotation_np.flatten().tolist()
-                quaternion_wxyz = [quaternion_xyzw[-1], *quaternion_xyzw[:-1]]
-                q = pin.Quaternion(*quaternion_wxyz)
-                q.normalize()
-                R = q.matrix()
+                R = Rotation.from_quat(rotation_np.reshape(4)).as_matrix()
             elif rotation_np.size == 9:
-                assert rotation_np.shape == (3, 3)
-                R = rotation_np
+                R = rotation_np.reshape(3, 3)
             else:
                 raise ValueError
-            t = np.asarray(translation)
-            self._T = pin.SE3(R, t.reshape(3, 1))
 
-        else:
-            raise ValueError
+            t = _to_numpy(translation).reshape(3)
+            self._matrix = np.eye(4)
+            self._matrix[:3, :3] = R
+            self._matrix[:3, 3] = t
+            return
+
+        raise ValueError
 
     def __mul__(self, other: "Transform") -> "Transform":
-        T = self._T * other._T
-        return Transform(T)
-
-    def inverse(self) -> "Transform":
-        return Transform(self._T.inverse())
+        return Transform(self.matrix @ other.matrix)
 
     def __str__(self) -> str:
-        return str(self._T)
-
-    def toHomogeneousMatrix(self) -> np.ndarray:
-        return self._T.homogeneous
+        return str(self._matrix)
 
     def toTensor(self) -> np.ndarray:
-        return torch.from_numpy(self._T.homogeneous).float()
-
-    @property
-    def translation(self) -> np.ndarray:
-        return self._T.translation.reshape(3)
-
-    @property
-    def quaternion(self) -> pin.Quaternion:
-        return pin.Quaternion(self._T.rotation)
+        return torch.from_numpy(self.matrix).float()
 
     @property
     def matrix(self) -> np.ndarray:
         """Returns 4x4 homogeneous matrix representations"""
-        return self._T.homogeneous
-
-    @staticmethod
-    def from_inplane(inplane: float) -> "Transform":
-        R_inplane = Rotation.from_euler("z", -inplane, degrees=True).as_matrix()
-        matrix = np.eye(4)
-        matrix[:3, :3] = R_inplane
-        return Transform(matrix)
+        return self._matrix.copy()
 
 
 class ScaleTransform(Transform):
     def __init__(self, scale_factor: float):
-        """
-        Args:
-        scale: float
-        """
         scale_transform = np.eye(4)
         scale_transform[0, 0] *= scale_factor
         scale_transform[1, 1] *= scale_factor
         scale_transform[2, 2] *= scale_factor
-        self._T = pin.SE3(scale_transform)
+        self._matrix = scale_transform
+
+
+def _to_numpy(value):
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().numpy()
+    return np.asarray(value)
