@@ -1,0 +1,2 @@
+local_root_dir: ./gigaPose_datasets
+dinov2_repo_dir: ./dinov2

@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+# Third Party
+from pathlib import Path
+import pandas as pd
+from torch.utils.data import Dataset
+from src.utils.dataset import LMO_index_to_ID
+from src.utils.inout import load_json
+from src.custom_megapose.template_dataset import TemplateDataset
+import torch
+import src.utils.tensor_collection as tc
+
+
+class TemplateSet(Dataset):
+    def __init__(
+        self,
+        root_dir,
+        dataset_name,
+        template_config,
+        transforms,
+        **kwargs,
+    ):
+        self.root_dir = Path(root_dir)
+        self.dataset_name = dataset_name
+        self.transforms = transforms
+
+        # load the dataset
+        cad_name = self.get_cad_name(dataset_name)
+
+        # load the template dataset
+        model_infos = load_json(self.root_dir / self.dataset_name / cad_name / "models_info.json")
+        self.model_infos = [{"obj_id": int(obj_id)} for obj_id in model_infos.keys()]
+
+        template_config.dir = str(Path(template_config.dir) / dataset_name)
+        self.template_dataset = TemplateDataset.from_config(
+            self.model_infos, template_config
+        )
+
+    def get_cad_name(self, dataset_name):
+        if dataset_name in ["tless"]:
+            cad_name = "models_cad"
+        else:
+            cad_name = "models"
+        return cad_name
+
+    def __len__(self):
+        return len(self.model_infos)
+
+    def __getitem__(self, index):
+        # loading templates
+        if "lmo" in self.dataset_name:
+            label = LMO_index_to_ID[index]
+        else:
+            label = f"{index+1}"
+
+        # load template data
+        template_data = self.template_dataset.get_object_templates(label)
+        data, poses = template_data.read_test_mode()
+
+        # crop the template
+        cropped_data = self.transforms.crop_transform(data["box"], images=data["rgba"])
+        cropped_data["images"][:, :3] = self.transforms.normalize(
+            cropped_data["images"][:, :3]
+        )
+        data["K"] = torch.from_numpy(self.template_dataset.K).float()
+
+        out_data = tc.PandasTensorCollection(
+            K=data["K"],
+            rgb=cropped_data["images"][:, :3],
+            mask=cropped_data["images"][:, -1],
+            M=cropped_data["M"],
+            poses=poses,
+            infos=pd.DataFrame(),
+        )
+        return out_data

@@ -1,0 +1,11 @@
+dataloader:
+  _target_: src.dataloader.test.GigaPoseTestSet
+  root_dir: ${machine.root_dir}/datasets/
+  dataset_name:
+  transforms: ${data.transform}
+  template_config:
+    dir: ${machine.root_dir}/datasets/templates/
+    scale_factor: 1.0
+    num_templates: 162
+    pose_name: object_poses/OBJECT_ID.npy
+  test_setting:

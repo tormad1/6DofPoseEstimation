@@ -1,0 +1,22 @@
+name: gigapose
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - pip:
+    - torch
+    - torchvision
+    - numpy
+    - omegaconf
+    - fvcore
+    - iopath
+    - pycocotools
+    - scipy
+    - hydra-core
+    - pandas
+    - einops
+    - pillow
+    - tqdm
