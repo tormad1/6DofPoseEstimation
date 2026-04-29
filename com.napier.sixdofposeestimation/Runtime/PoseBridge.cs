@@ -86,12 +86,11 @@ public class PoseBridge : MonoBehaviour
     public void SendFrameToPython(Texture2D frame)
     {
         byte[] pngBytes = frame.EncodeToPNG();
-        string tempPath = Path.Combine(Application.temporaryCachePath, "frame.png");
-        File.WriteAllBytes(tempPath, pngBytes);
 
+        // Pass bytes directly in memory — no file write
         var outBuf = new System.Text.StringBuilder(256);
-        int result = GigaPoseBridgeNative.OpenImageTest(tempPath, outBuf, outBuf.Capacity);
-
-        Debug.Log($"[PoseBridge] OpenImageTest returned: {result}, output: {outBuf}");
+        // GigaPoseBridge will need a ProcessImageBytes function eventually.
+        // For now, log that we have a frame ready.
+        Debug.Log($"[PoseBridge] Frame ready: {pngBytes.Length} bytes");
     }
 }
