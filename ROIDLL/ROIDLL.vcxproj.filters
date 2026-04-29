@@ -21,9 +21,6 @@
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ROIDLL.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="crop.h">
       <Filter>Header Files</Filter>
     </ClInclude>

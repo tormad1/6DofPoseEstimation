@@ -41,22 +41,16 @@ void test_loadModel(int model);
 
 // Process
 std::vector<float> preprocess(const cv::Mat& letterboxed);
-std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx, bool DEBUG);
 
+
+// Inference two results, the cropped image and the best detection
+struct InferenceResult {
+    std::optional<cv::Mat> croppedImage;
+    std::optional<Detection> bestDetection;
+};
+
+InferenceResult runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx, bool DEBUG);
 
 
 std::optional<cv::Mat> cropDetection(const cv::Mat& image, const std::vector<Detection>& detections);
-
-
-int runDetection(
-    OrtContext* g_ctx,
-    const cv::Mat& letterboxed,
-    const cv::Mat& original,
-    float* out_x,
-    float* out_y,
-    float* out_w,
-    float* out_h,
-    float* out_confidence
-);
-
 

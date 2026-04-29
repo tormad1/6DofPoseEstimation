@@ -53,7 +53,7 @@ std::vector<float> preprocess(const cv::Mat& letterboxed) {
 }
 
 
-std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx, bool DEBUG) {
+struct InferenceResult runInference(const cv::Mat& original, const cv::Mat& letterboxed, OrtContext& ctx, bool DEBUG) {
 
 
     std::vector<float> inputTensor = preprocess(letterboxed);
@@ -105,8 +105,16 @@ std::optional<cv::Mat> runInference(const cv::Mat& original, const cv::Mat& lett
         original.rows
     );
 
+
+
+    // Save cropped image and coords of detection.
     auto cropped = cropDetection(original, detections);
-    return cropped;
+    InferenceResult result;
+    result.croppedImage = cropped;
+    if (!detections.empty()) {
+        result.bestDetection = detections[0];
+    }
+    return result;
 }
 
 std::vector<Detection> postprocess(Ort::Value& outputTensor, int origW, int origH, int modelW, int modelH, float confThreshold){
@@ -217,56 +225,4 @@ std::optional<cv::Mat> cropDetection(const cv::Mat& image, const std::vector<Det
 
     return image(best->box).clone();
 }
-
-
-
-
-
-
-// Essentially Run inference except without the cropped image output as we don't need it.
-int runDetection(OrtContext* g_ctx, const cv::Mat& letterboxed, const cv::Mat& image, float* out_x, float* out_y, float* out_w, float* out_h, float* out_confidence) {
-    
-    
-    std::vector<float> inputTensor = preprocess(letterboxed);
-    std::vector<int64_t> inputShape = { 1, 3, 640, 640 };
-    Ort::MemoryInfo memInfo = Ort::MemoryInfo::CreateCpu(
-        OrtArenaAllocator, OrtMemTypeDefault);
-    Ort::Value inputOrtTensor = Ort::Value::CreateTensor<float>(
-        memInfo,
-        inputTensor.data(), inputTensor.size(),
-        inputShape.data(), inputShape.size());
-
-    Ort::AllocatorWithDefaultOptions allocator;
-    auto inputNamePtr = g_ctx->session.GetInputNameAllocated(0, allocator);
-    auto outputNamePtr = g_ctx->session.GetOutputNameAllocated(0, allocator);
-    const char* inputName = inputNamePtr.get();
-    const char* outputName = outputNamePtr.get();
-
-    auto outputTensors = g_ctx->session.Run(
-        Ort::RunOptions{ nullptr },
-        &inputName, &inputOrtTensor, 1,
-        &outputName, 1);
-
-   
-    std::vector<Detection> detections = postprocess(
-        outputTensors[0], image.cols, image.rows);
-
-    if (detections.empty()) return 0; // no detection — outputs untouched
-
-    // Pick highest confidence box
-    const Detection* best = &detections[0];
-    for (auto& d : detections)
-        if (d.score > best->score) best = &d;
-
-
-    // Write results into C#-allocated floats
-    *out_x = best->box.x;
-    *out_y = best->box.y;
-    *out_w = best->box.width;
-    *out_h = best->box.height;
-    *out_confidence = best->score;
-
-    return 1;
-}
-
 
