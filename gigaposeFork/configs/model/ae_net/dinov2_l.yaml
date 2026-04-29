@@ -1,6 +1,0 @@
-_target_: src.models.network.ae_net.AENet
-model_name: dinov2_vitl14
-
-dinov2_repo_dir: ${user.dinov2_repo_dir}
-
-max_batch_size: 64

@@ -1,4 +1,0 @@
-# RGB-only inference data config.
-defaults:
-  - /data/transform_inference@transform
-  - /data/bop@test
