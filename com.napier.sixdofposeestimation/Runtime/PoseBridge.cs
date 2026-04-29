@@ -12,6 +12,8 @@ public class PoseBridge : MonoBehaviour
     private System.Diagnostics.Stopwatch stopwatch;
     public PoseManager poseManager;
 
+
+
     [StructLayout(LayoutKind.Sequential)]
     public struct Pose
     {
@@ -72,6 +74,8 @@ public class PoseBridge : MonoBehaviour
                 SendFrameToPython(croppedFrame);
             }
         }
+
+      
     }
 
     public int GetPose(out Pose pose)

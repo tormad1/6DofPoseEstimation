@@ -1,0 +1,309 @@
+.
+├── 6DofPoseEstimation.slnx
+├── 6DofPoseEstimation.vcxproj
+├── 6DofPoseEstimation.vcxproj.filters
+├── 6DofPoseEstimation.vcxproj.user
+├── 6DofPose.f4d0c4fd
+│   └── x64
+│       └── Release
+│           ├── 6DofPoseEstimation.exe.recipe
+│           ├── 6DofPoseEstimation.iobj
+│           ├── 6DofPoseEstimation.ipdb
+│           ├── 6DofPoseEstimation.log
+│           ├── 6DofPose.f4d0c4fd_MD.tlog
+│           ├── 6DofPose.f4d0c4fd.tlog
+│           ├── crop.obj
+│           ├── debug.obj
+│           ├── microsoft
+│           ├── model.obj
+│           ├── ROI.obj
+│           └── vc145.pdb
+├── com.napier.sixdofposeestimation
+│   ├── package.json
+│   ├── package.json.meta
+│   ├── Plugins
+│   │   ├── x86_64
+│   │   │   ├── DummyPose.dll
+│   │   │   ├── DummyPose.dll.meta
+│   │   │   ├── onnxruntime.dll
+│   │   │   ├── onnxruntime.dll.meta
+│   │   │   ├── opencv_world4130.dll
+│   │   │   ├── opencv_world4130.dll.meta
+│   │   │   ├── ROIDLL.dll
+│   │   │   └── ROIDLL.dll.meta
+│   │   └── x86_64.meta
+│   ├── Plugins.meta
+│   ├── README.md
+│   ├── README.md.meta
+│   ├── Runtime
+│   │   ├── com.napier.sixdofposeestimation.Runtime.asmdef
+│   │   ├── com.napier.sixdofposeestimation.Runtime.asmdef.meta
+│   │   ├── PoseBridge.cs
+│   │   ├── PoseBridge.cs.meta
+│   │   ├── PoseManager.cs
+│   │   ├── PoseManager.cs.meta
+│   │   ├── ROIBridge.cs
+│   │   ├── ROIBridge.cs.meta
+│   │   ├── WebCam.cs
+│   │   └── WebCam.cs.meta
+│   ├── Runtime.meta
+│   └── Samples~
+│       └── ExampleScene
+│           └── MainScene.unity
+├── docs
+│   ├── external-libraries-1.png
+│   ├── external-libraries-2.png
+│   ├── external-libraries-3.png
+│   ├── external-libraries-4.png
+│   ├── external-libraries.md
+│   └── template_generation.md
+├── DummyPose
+│   ├── DummyPose.cpp
+│   ├── DummyPose.h
+│   ├── DummyPose.sln
+│   ├── DummyPose.vcxproj
+│   ├── DummyPose.vcxproj.filters
+│   └── framework.h
+├── gigapose
+│   └── datasets
+│       ├── 000011.zip
+│       ├── cnos-fastsam_T282-test_custom.json
+│       ├── gen.py
+│       ├── monster_can
+│       │   └── models
+│       ├── Monster Can Pics (GP)-20260413T031826Z-3-001.zip
+│       ├── object_poses
+│       │   └── 000011.npy
+│       ├── scene_camera.json
+│       ├── soda_can
+│       │   └── models
+│       ├── templates
+│       │   └── monster_can
+│       └── test_targets_bop19.json
+├── GigaPoseBridge
+│   ├── GigaPoseBridge
+│   │   ├── dllmain.cpp
+│   │   ├── framework.h
+│   │   ├── GigaPoseBridge.cpp
+│   │   ├── GigaPoseBridge.h
+│   │   ├── GigaPoseBridge.vcxproj
+│   │   ├── GigaPoseBridge.vcxproj.filters
+│   │   ├── GigaPoseBridge.vcxproj.user
+│   │   ├── pch.cpp
+│   │   ├── pch.h
+│   │   └── x64
+│   │       ├── Debug
+│   │       └── Release
+│   ├── GigaPoseBridge.slnx
+│   ├── GigaPoseBridgeTest
+│   │   ├── GigaPoseBridge.h
+│   │   ├── GigaPoseBridgeTest.cpp
+│   │   ├── GigaPoseBridgeTest.vcxproj
+│   │   ├── GigaPoseBridgeTest.vcxproj.filters
+│   │   ├── GigaPoseBridgeTest.vcxproj.user
+│   │   └── x64
+│   │       └── Release
+│   └── x64
+│       ├── Debug
+│       │   └── GigaPoseBridge.pdb
+│       └── Release
+│           ├── GigaPoseBridge.dll
+│           ├── GigaPoseBridge.exp
+│           ├── GigaPoseBridge.lib
+│           ├── GigaPoseBridge.pdb
+│           ├── GigaPoseBridgeTest.exe
+│           └── GigaPoseBridgeTest.pdb
+├── gigaposeFork
+│   ├── configs
+│   │   ├── data
+│   │   │   ├── bop.yaml
+│   │   │   ├── inference.yaml
+│   │   │   └── transform_inference.yaml
+│   │   ├── machine
+│   │   │   └── local.yaml
+│   │   ├── model
+│   │   │   ├── ae_net
+│   │   │   ├── ist_net
+│   │   │   └── large.yaml
+│   │   ├── test.yaml
+│   │   └── user
+│   │       └── default.yaml
+│   ├── environment.yml
+│   ├── gigaPose_datasets
+│   │   └── datasets
+│   │       ├── default_detections
+│   │       ├── T282
+│   │       └── templates
+│   ├── gigapose_runtime.py
+│   ├── LICENSE
+│   ├── pyproject.toml
+│   ├── src
+│   │   ├── custom_megapose
+│   │   │   ├── template_dataset.py
+│   │   │   └── transform.py
+│   │   ├── dataloader
+│   │   │   ├── scene.py
+│   │   │   ├── template.py
+│   │   │   └── test.py
+│   │   ├── lib3d
+│   │   │   └── torch.py
+│   │   ├── models
+│   │   │   ├── gigaPose.py
+│   │   │   ├── matching.py
+│   │   │   ├── network
+│   │   │   ├── poses.py
+│   │   │   └── ransac.py
+│   │   ├── runtime.py
+│   │   └── utils
+│   │       ├── batch.py
+│   │       ├── bbox.py
+│   │       ├── crop.py
+│   │       ├── dataset.py
+│   │       ├── inout.py
+│   │       ├── logging.py
+│   │       ├── pil.py
+│   │       ├── tensor_collection.py
+│   │       └── time.py
+│   └── test.py
+├── README.md
+├── resources
+│   ├── helpers
+│   │   ├── convertptonnx.py
+│   │   ├── script1.py
+│   │   └── script2.py
+│   ├── images
+│   │   └── source
+│   │       ├── bottle.jpg
+│   │       ├── monster-1.jpg
+│   │       ├── monster-2.jpg
+│   │       ├── monster-3.jpg
+│   │       ├── monster-4.jpg
+│   │       ├── monster-5.jpg
+│   │       ├── monster-6.jpg
+│   │       ├── monster-7.jpg
+│   │       └── monster-8.jpg
+│   └── models
+│       └── yolov8m-canned.onnx
+├── ROIDLL
+│   ├── crop.cpp
+│   ├── crop.h
+│   ├── debug.cpp
+│   ├── debug.h
+│   ├── dllmain.cpp
+│   ├── framework.h
+│   ├── model.cpp
+│   ├── model.h
+│   ├── pch.cpp
+│   ├── pch.h
+│   ├── ROIDLL
+│   │   └── x64
+│   │       └── Release
+│   ├── ROIDLL.cpp
+│   ├── ROIDLL.slnx
+│   ├── ROIDLL.vcxproj
+│   ├── ROIDLL.vcxproj.filters
+│   ├── ROIDLL.vcxproj.user
+│   └── x64
+│       ├── Debug
+│       │   ├── onnxruntime.dll
+│       │   └── opencv_world4130d.dll
+│       └── Release
+│           ├── onnxruntime.dll
+│           ├── opencv_world4130.dll
+│           ├── ROIDLL.dll
+│           ├── ROIDLL.exp
+│           ├── ROIDLL.lib
+│           └── ROIDLL.pdb
+├── src
+│   └── ROI
+│       ├── crop.cpp
+│       ├── crop.hpp
+│       ├── model.cpp
+│       ├── model.hpp
+│       └── ROI.cpp
+├── treeOutput
+├── treeOutputNew
+├── UnityProject
+│   ├── Assembly-CSharp.csproj
+│   ├── Assembly-CSharp.csproj.user
+│   ├── Assembly-CSharp-Editor.csproj
+│   ├── Assets
+│   │   ├── DefaultVolumeProfile.asset
+│   │   ├── DefaultVolumeProfile.asset.meta
+│   │   ├── InputSystem_Actions.inputactions
+│   │   ├── InputSystem_Actions.inputactions.meta
+│   │   ├── Plugins
+│   │   │   ├── x86_64
+│   │   │   └── x86_64.meta
+│   │   ├── Plugins.meta
+│   │   ├── Readme.asset
+│   │   ├── Readme.asset.meta
+│   │   ├── red.mat
+│   │   ├── red.mat.meta
+│   │   ├── Scenes
+│   │   │   ├── CameraInViewport.unity
+│   │   │   ├── CameraInViewport.unity.meta
+│   │   │   ├── TestScene.unity
+│   │   │   └── TestScene.unity.meta
+│   │   ├── Scenes.meta
+│   │   ├── Scripts
+│   │   ├── Scripts.meta
+│   │   ├── Settings
+│   │   │   ├── DefaultVolumeProfile.asset
+│   │   │   ├── DefaultVolumeProfile.asset.meta
+│   │   │   ├── Mobile_Renderer.asset
+│   │   │   ├── Mobile_Renderer.asset.meta
+│   │   │   ├── Mobile_RPAsset.asset
+│   │   │   ├── Mobile_RPAsset.asset.meta
+│   │   │   ├── PC_Renderer.asset
+│   │   │   ├── PC_Renderer.asset.meta
+│   │   │   ├── PC_RPAsset.asset
+│   │   │   ├── PC_RPAsset.asset.meta
+│   │   │   ├── SampleSceneProfile.asset
+│   │   │   ├── SampleSceneProfile.asset.meta
+│   │   │   ├── UniversalRenderPipelineGlobalSettings.asset
+│   │   │   └── UniversalRenderPipelineGlobalSettings.asset.meta
+│   │   ├── Settings.meta
+│   │   ├── StreamingAssets
+│   │   │   ├── models
+│   │   │   └── models.meta
+│   │   ├── StreamingAssets.meta
+│   │   ├── TutorialInfo
+│   │   │   ├── Icons
+│   │   │   ├── Icons.meta
+│   │   │   ├── Layout.wlt
+│   │   │   ├── Layout.wlt.meta
+│   │   │   ├── Scripts
+│   │   │   └── Scripts.meta
+│   │   ├── TutorialInfo.meta
+│   │   ├── UniversalRenderPipelineGlobalSettings.asset
+│   │   ├── UniversalRenderPipelineGlobalSettings.asset.meta
+│   │   ├── WebCamMaterialCropped.mat
+│   │   ├── WebCamMaterialCropped.mat.meta
+│   │   ├── WebCamMaterial.mat
+│   │   ├── WebCamMaterial.mat.meta
+│   │   ├── XR
+│   │   │   ├── XRGeneralSettingsPerBuildTarget.asset
+│   │   │   └── XRGeneralSettingsPerBuildTarget.asset.meta
+│   │   └── XR.meta
+│   ├── Backup
+│   │   └── UnityProject.slnx
+│   ├── Napier.SixDofPoseEstimation.Runtime.csproj
+│   ├── UnityProject.slnx
+│   ├── UpgradeLog2.htm
+│   ├── UpgradeLog3.htm
+│   ├── UpgradeLog4.htm
+│   └── UpgradeLog.htm
+└── x64
+    ├── Debug
+    │   ├── 6DofPoseEstimation.exe
+    │   ├── 6DofPoseEstimation.pdb
+    │   ├── onnxruntime.dll
+    │   └── opencv_world4130d.dll
+    └── Release
+        ├── 6DofPoseEstimation.exe
+        ├── 6DofPoseEstimation.pdb
+        ├── onnxruntime.dll
+        └── opencv_world4130.dll
+
+86 directories, 221 files

@@ -7,6 +7,7 @@ public class ROIBridge : MonoBehaviour
     [Header("References")]
     public WebCam webCam;
     public PoseBridge poseBridge;
+    [SerializeField] private Material croppedMaterial;
 
     [Header("Settings")]
     public int intervalFrames = 10;
@@ -16,6 +17,7 @@ public class ROIBridge : MonoBehaviour
     public bool detectionFound = false;
 
     private int frameCount = 0;
+    public Texture2D CroppedTexture { get; private set; }
 
     private static class Native
     {
@@ -41,9 +43,11 @@ public class ROIBridge : MonoBehaviour
     {
         string modelPath = System.IO.Path.Combine(
             Application.streamingAssetsPath, "models", "yolov8m-canned.onnx");
-
         int result = Native.InitROI(modelPath);
         Debug.Log($"[ROIBridge] InitROI: {result}");
+
+        Debug.Log($"[ROIBridge] Model path: {modelPath}");
+        Debug.Log($"[ROIBridge] File exists: {System.IO.File.Exists(modelPath)}");
     }
 
     void OnDestroy() => Native.ShutdownROI();
@@ -54,37 +58,56 @@ public class ROIBridge : MonoBehaviour
         if (frameCount < intervalFrames) return;
         frameCount = 0;
 
-        if (webCam == null || webCam.Texture == null || !webCam.Texture.didUpdateThisFrame)
+        if (webCam == null || webCam.Texture == null || !webCam.Texture.isPlaying)
+        {
+            Debug.Log($"[ROIBridge] Skipping — webcam not ready. " +
+                      $"Texture={webCam?.Texture != null}, " +
+                      $"Playing={webCam?.Texture?.isPlaying}");
             return;
+        }
 
-        Texture2D cropped = ProcessFrame(webCam.Texture);
+        Debug.Log("[ROIBridge] Running detection...");
 
-        if (cropped != null && poseBridge != null)
-            poseBridge.croppedFrame = cropped;
+        ProcessFrame(webCam.Texture);
+
+        // Update material directly using this class's own CroppedTexture
+        if (CroppedTexture != null && croppedMaterial != null)
+            croppedMaterial.mainTexture = CroppedTexture;
+
+        // Hand texture to PoseBridge for GigaPose
+        if (CroppedTexture != null && poseBridge != null)
+            poseBridge.croppedFrame = CroppedTexture;
     }
 
-    private Texture2D ProcessFrame(WebCamTexture cam)
+    private void ProcessFrame(WebCamTexture cam)
     {
         Color32[] pixels = cam.GetPixels32();
         byte[] raw = new byte[pixels.Length * 4];
-        Buffer.BlockCopy(pixels, 0, raw, 0, raw.Length);
+
+        // Replace Buffer.BlockCopy with manual extraction
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            raw[i * 4 + 0] = pixels[i].r;
+            raw[i * 4 + 1] = pixels[i].g;
+            raw[i * 4 + 2] = pixels[i].b;
+            raw[i * 4 + 3] = pixels[i].a;
+        }
 
         int status = Native.RunDetection(
             raw, cam.width, cam.height,
             out lastX, out lastY, out lastW, out lastH, out lastScore);
 
         detectionFound = (status == 1);
-        if (!detectionFound) return null;
+        if (!detectionFound) return;
 
-        Debug.Log($"[ROIBridge] Box ({lastX:F0},{lastY:F0}) {lastW:F0}x{lastH:F0} conf={lastScore:F2}");
-
-        if (Native.GetCroppedImage(out IntPtr ptr, out int size) != 1) return null;
+        if (Native.GetCroppedImage(out IntPtr ptr, out int size) != 1) return;
 
         byte[] jpegBytes = new byte[size];
         Marshal.Copy(ptr, jpegBytes, 0, size);
 
-        Texture2D tex = new Texture2D(2, 2);
-        tex.LoadImage(jpegBytes);
-        return tex;
+        if (CroppedTexture == null)
+            CroppedTexture = new Texture2D(2, 2);
+
+        CroppedTexture.LoadImage(jpegBytes);
     }
 }
