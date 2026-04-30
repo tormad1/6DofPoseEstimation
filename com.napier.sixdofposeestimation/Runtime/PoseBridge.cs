@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class PoseBridge : MonoBehaviour
 {
-    public bool useDummy = true;
+    public bool useDummy = false;
     public Texture2D croppedFrame;
     private int mode = 0;
     public int intervalFrames = 10;
@@ -91,10 +91,12 @@ public class PoseBridge : MonoBehaviour
     {
         byte[] pngBytes = frame.EncodeToPNG();
 
-        // Pass bytes directly in memory — no file write
+        // Write to a temp file so OpenImageTest (file-path API) can read it
+        string tempPath = Path.Combine(Application.temporaryCachePath, "frame.png");
+        File.WriteAllBytes(tempPath, pngBytes);
+
         var outBuf = new System.Text.StringBuilder(256);
-        // GigaPoseBridge will need a ProcessImageBytes function eventually.
-        // For now, log that we have a frame ready.
-        Debug.Log($"[PoseBridge] Frame ready: {pngBytes.Length} bytes");
+        int result = GigaPoseBridgeNative.OpenImageTest(tempPath, outBuf, 256);
+        Debug.Log($"[PoseBridge] Python opened frame: {outBuf} (status={result})");
     }
 }

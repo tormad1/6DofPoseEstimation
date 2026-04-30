@@ -1,5 +1,6 @@
+#include "pch.h"
 #include <iostream>
-#include "debug.hpp"
+#include "debug.h"
 
 void print_DEBUG(const std::string& msg, bool DEBUG) {
 	if (DEBUG) {

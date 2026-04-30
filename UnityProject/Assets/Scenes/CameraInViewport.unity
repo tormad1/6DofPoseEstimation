@@ -481,6 +481,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1257223939}
   - component: {fileID: 1257223938}
+  - component: {fileID: 1257223940}
   m_Layer: 0
   m_Name: Controller
   m_TagString: Untagged
@@ -501,7 +502,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Napier.SixDofPoseEstimation.Runtime::ROIBridge
   webCam: {fileID: 1096904181}
-  poseBridge: {fileID: 0}
+  poseBridge: {fileID: 1257223940}
   croppedMaterial: {fileID: 2100000, guid: 8f8bc3b024719af46afbf3561f5bec65, type: 2}
   intervalFrames: 60
   lastX: 0
@@ -525,6 +526,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1257223940
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1257223937}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d75ed5883e44caf4abc091d81488dc64, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Napier.SixDofPoseEstimation.Runtime::PoseBridge
+  useDummy: 0
+  croppedFrame: {fileID: 0}
+  intervalFrames: 10
+  poseManager: {fileID: 0}
 --- !u!1 &1409363026
 GameObject:
   m_ObjectHideFlags: 0

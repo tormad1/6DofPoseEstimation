@@ -43,7 +43,7 @@ public class ROIBridge : MonoBehaviour
     void Start()
     {
         string modelPath = System.IO.Path.Combine(
-            Application.streamingAssetsPath, "models", "yolov8m-can-large.onnx");
+            Application.streamingAssetsPath, "models", "yolov8m-canned.onnx");
         int result = Native.InitROI(modelPath);
         Debug.Log($"[ROIBridge] InitROI: {result}");
 

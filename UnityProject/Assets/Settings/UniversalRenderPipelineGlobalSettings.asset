@@ -64,15 +64,9 @@ MonoBehaviour:
       - rid: 2054621469847846921
       - rid: 2054621469847846922
       - rid: 2054621469847846923
-<<<<<<< Updated upstream
       - rid: 2650871284162887747
       - rid: 2650871284162887748
       - rid: 2650871284162887749
-=======
-      - rid: 2650871532719964225
-      - rid: 2650871532719964226
-      - rid: 2650871532719964227
->>>>>>> Stashed changes
     m_RuntimeSettings:
       m_List: []
   m_AssetVersion: 10
@@ -263,31 +257,19 @@ MonoBehaviour:
       data:
         m_Version: 1
         m_UseBicubicLightmapSampling: 0
-<<<<<<< Updated upstream
     - rid: 2650871284162887747
-=======
-    - rid: 2650871532719964225
->>>>>>> Stashed changes
       type: {class: UniversalRenderPipelineRuntimeTerrainShaders, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.Runtime}
       data:
         m_Version: 0
         m_TerrainDetailLit: {fileID: 4800000, guid: f6783ab646d374f94b199774402a5144, type: 3}
         m_TerrainDetailGrassBillboard: {fileID: 4800000, guid: 29868e73b638e48ca99a19ea58c48d90, type: 3}
         m_TerrainDetailGrass: {fileID: 4800000, guid: e507fdfead5ca47e8b9a768b51c291a1, type: 3}
-<<<<<<< Updated upstream
     - rid: 2650871284162887748
-=======
-    - rid: 2650871532719964226
->>>>>>> Stashed changes
       type: {class: URPTerrainShaderSetting, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.Runtime}
       data:
         m_Version: 0
         m_IncludeTerrainShaders: 1
-<<<<<<< Updated upstream
     - rid: 2650871284162887749
-=======
-    - rid: 2650871532719964227
->>>>>>> Stashed changes
       type: {class: WorldRenderPipelineResources, ns: UnityEngine.PathTracing.Core, asm: Unity.PathTracing.Runtime}
       data:
         _version: 3
