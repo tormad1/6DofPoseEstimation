@@ -70,7 +70,7 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros">
-    <GigaPosePythonSdkDir Condition="'$(GigaPosePythonSdkDir)'==''">$(LocalAppData)\Programs\Python\Python311\</GigaPosePythonSdkDir>
+    <GigaPosePythonSdkDir Condition="'$(GigaPosePythonSdkDir)'==''">C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\</GigaPosePythonSdkDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
