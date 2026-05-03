@@ -41,11 +41,29 @@ public class PoseBridge : MonoBehaviour
         public static extern void ShutdownPython();
     }
 
+    private static class WindowsNative
+    {
+        [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool SetDllDirectory(string path);
+    }
+
     void Start()
     {
         stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        string pythonHome = @"C:\Users\solar\miniconda3";
+        string repoRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".."));
+        string pythonHome = Path.Combine(repoRoot, "gigaposeFork", ".python", "python-3.11.9-embed-amd64");
+        string pluginDir = Path.Combine(repoRoot, "com.napier.sixdofposeestimation", "Plugins", "x86_64");
+        string torchLib = Path.Combine(repoRoot, "gigaposeFork", ".venv", "Lib", "site-packages", "torch", "lib");
+        string currentPath = System.Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        if (Directory.Exists(pluginDir) && !currentPath.Contains(pluginDir))
+            currentPath = pluginDir + Path.PathSeparator + currentPath;
+        if (Directory.Exists(torchLib) && !currentPath.Contains(torchLib))
+            currentPath = torchLib + Path.PathSeparator + currentPath;
+        System.Environment.SetEnvironmentVariable("PATH", currentPath);
+        if (Directory.Exists(pluginDir))
+            WindowsNative.SetDllDirectory(pluginDir);
+
         int initResult = GigaPoseBridgeNative.InitPython(pythonHome);
         Debug.Log($"[PoseBridge] InitPython returned: {initResult}");
     }
