@@ -74,9 +74,19 @@ public class ROIBridge : MonoBehaviour
         if (CroppedTexture != null && croppedMaterial != null)
             croppedMaterial.mainTexture = CroppedTexture;
 
-        // Hand texture to PoseBridge for GigaPose
+        // Hand ROI, bbox, and full-frame size to GigaPose
         if (CroppedTexture != null && poseBridge != null)
-            poseBridge.croppedFrame = CroppedTexture;
+        {
+            poseBridge.SubmitRoi(
+                CroppedTexture,
+                lastX,
+                lastY,
+                lastW,
+                lastH,
+                cam.width,
+                cam.height
+            );
+        }
     }
 
     private void ProcessFrame(WebCamTexture cam)
