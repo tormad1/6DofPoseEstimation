@@ -14,7 +14,7 @@ public class ROIBridge : MonoBehaviour
     public int intervalFrames = 10;
 
     [Header("Debug")]
-    public float lastX, lastY, lastW, lastH, lastScore;
+    public float lastX, lastY, lastW, lastH;
     public bool detectionFound = false;
 
     private int frameCount = 0;
@@ -33,8 +33,7 @@ public class ROIBridge : MonoBehaviour
         public static extern int RunDetection(
             byte[] rgbaData, int width, int height,
             out float outX, out float outY,
-            out float outW, out float outH,
-            out float outScore);
+            out float outW, out float outH);
 
         [DllImport("ROIDLL", CallingConvention = CallingConvention.Cdecl)]
         public static extern int GetCroppedImage(out IntPtr outPtr, out int outSize);
@@ -96,7 +95,7 @@ public class ROIBridge : MonoBehaviour
 
         int status = Native.RunDetection(
             raw, cam.width, cam.height,
-            out lastX, out lastY, out lastW, out lastH, out lastScore);
+            out lastX, out lastY, out lastW, out lastH);
 
         detectionFound = (status == 1);
         if (!detectionFound) return;
