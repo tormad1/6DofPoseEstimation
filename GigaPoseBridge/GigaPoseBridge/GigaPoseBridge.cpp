@@ -271,8 +271,37 @@ extern "C"
 
             PyConfig config;
             PyConfig_InitPythonConfig(&config);
+            config.parse_argv = 0;
+            config.site_import = 0;
+            config.use_environment = 0;
+
+            const std::filesystem::path python_home_path = python_home_wide;
+            const std::wstring python_exe = (python_home_path / L"python.exe").wstring();
+            const std::wstring python_zip = (python_home_path / L"python311.zip").wstring();
 
             PyStatus status = PyConfig_SetString(&config, &config.home, python_home_wide.c_str());
+            if (PyStatus_Exception(status))
+            {
+                PyConfig_Clear(&config);
+                return 0;
+            }
+
+            status = PyConfig_SetString(&config, &config.program_name, python_exe.c_str());
+            if (PyStatus_Exception(status))
+            {
+                PyConfig_Clear(&config);
+                return 0;
+            }
+
+            config.module_search_paths_set = 1;
+            status = PyWideStringList_Append(&config.module_search_paths, python_zip.c_str());
+            if (PyStatus_Exception(status))
+            {
+                PyConfig_Clear(&config);
+                return 0;
+            }
+
+            status = PyWideStringList_Append(&config.module_search_paths, python_home_wide.c_str());
             if (PyStatus_Exception(status))
             {
                 PyConfig_Clear(&config);

@@ -17,17 +17,17 @@ public class PoseBridge : MonoBehaviour
     public Texture2D croppedFrame;
 
     [Header("Camera Intrinsics")]
-    public Camera sourceCamera;
-    public bool useManualIntrinsics = false;
     public Vector2 focalLengthPx = new Vector2(700f, 700f);
     public Vector2 principalPointPx = Vector2.zero;
-    public float fallbackVerticalFovDeg = 60f;
+    public Vector2 calibrationImageSizePx = new Vector2(640f, 480f);
 
     [Header("References")]
     public PoseManager poseManager;
 
     private bool runtimeReady = false;
-    private bool loggedFallbackIntrinsics = false;
+    private bool loggedInvalidIntrinsics = false;
+    private bool loggedFirstPose = false;
+    private bool loggedEffectiveIntrinsics = false;
     private System.Diagnostics.Stopwatch stopwatch;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -178,7 +178,8 @@ public class PoseBridge : MonoBehaviour
         }
 
         byte[] rgbaBytes = TextureToRgbaBytes(roiTexture);
-        float[] cameraK = BuildCameraIntrinsics(fullFrameWidth, fullFrameHeight);
+        if (!TryBuildCameraIntrinsics(fullFrameWidth, fullFrameHeight, out float[] cameraK))
+            return;
         long timestampUs = GetTimestampUs();
 
         var outBuf = new StringBuilder(512);
@@ -201,6 +202,16 @@ public class PoseBridge : MonoBehaviour
 
         if (result == 1)
         {
+            if (!loggedFirstPose)
+            {
+                Debug.Log(
+                    "[PoseBridge] First ROI pose: " +
+                    $"p=({pose.px:F4}, {pose.py:F4}, {pose.pz:F4}) " +
+                    $"q=({pose.qx:F4}, {pose.qy:F4}, {pose.qz:F4}, {pose.qw:F4}) " +
+                    $"confidence={pose.confidence:F3}"
+                );
+                loggedFirstPose = true;
+            }
             if (poseManager != null)
                 poseManager.OnPose(pose);
         }
@@ -210,63 +221,71 @@ public class PoseBridge : MonoBehaviour
         }
     }
 
-    public void SendFrameToPython(Texture2D frame)
-    {
-        if (frame == null)
-            return;
-
-        SubmitRoi(
-            frame,
-            0f,
-            0f,
-            frame.width,
-            frame.height,
-            frame.width,
-            frame.height
-        );
-    }
 
     private long GetTimestampUs()
     {
         return (stopwatch.ElapsedTicks * 1_000_000L) / System.Diagnostics.Stopwatch.Frequency;
     }
 
-    private float[] BuildCameraIntrinsics(int fullFrameWidth, int fullFrameHeight)
+    private bool TryBuildCameraIntrinsics(
+        int fullFrameWidth,
+        int fullFrameHeight,
+        out float[] cameraK)
     {
-        float fx;
-        float fy;
-        float cx;
-        float cy;
+        cameraK = null;
 
-        if (useManualIntrinsics)
+        float fx = focalLengthPx.x;
+        float fy = focalLengthPx.y;
+        float cx = principalPointPx.x;
+        float cy = principalPointPx.y;
+        float calibWidth = calibrationImageSizePx.x;
+        float calibHeight = calibrationImageSizePx.y;
+
+        if (
+            fx <= 0f || fy <= 0f || cx <= 0f || cy <= 0f ||
+            calibWidth <= 0f || calibHeight <= 0f
+        )
         {
-            fx = focalLengthPx.x;
-            fy = focalLengthPx.y > 0f ? focalLengthPx.y : fx;
-            cx = principalPointPx.x > 0f ? principalPointPx.x : fullFrameWidth * 0.5f;
-            cy = principalPointPx.y > 0f ? principalPointPx.y : fullFrameHeight * 0.5f;
-        }
-        else
-        {
-            float verticalFovDeg = sourceCamera != null ? sourceCamera.fieldOfView : fallbackVerticalFovDeg;
-            if (sourceCamera == null && !loggedFallbackIntrinsics)
+            if (!loggedInvalidIntrinsics)
             {
-                Debug.LogWarning("[PoseBridge] sourceCamera not set. Using fallback FOV for intrinsics.");
-                loggedFallbackIntrinsics = true;
+                Debug.LogWarning(
+                    "[PoseBridge] Manual webcam intrinsics are required. " +
+                    $"Set focalLengthPx, principalPointPx and calibrationImageSizePx on PoseBridge. " +
+                    $"Current values: fx={fx}, fy={fy}, cx={cx}, cy={cy}, " +
+                    $"calibWidth={calibWidth}, calibHeight={calibHeight}. " +
+                    $"Current full-frame size: {fullFrameWidth}x{fullFrameHeight}."
+                );
+                loggedInvalidIntrinsics = true;
             }
-
-            float verticalFovRad = verticalFovDeg * Mathf.Deg2Rad;
-            fy = 0.5f * fullFrameHeight / Mathf.Tan(0.5f * verticalFovRad);
-            fx = fy;
-            cx = fullFrameWidth * 0.5f;
-            cy = fullFrameHeight * 0.5f;
+            return false;
         }
 
-        return new[]
+        float scaleX = fullFrameWidth / calibWidth;
+        float scaleY = fullFrameHeight / calibHeight;
+        fx *= scaleX;
+        fy *= scaleY;
+        cx *= scaleX;
+        cy *= scaleY;
+
+        loggedInvalidIntrinsics = false;
+        cameraK = new[]
         {
             fx, 0f, cx,
             0f, fy, cy,
             0f, 0f, 1f
         };
+
+        if (!loggedEffectiveIntrinsics)
+        {
+            Debug.Log(
+                "[PoseBridge] Effective intrinsics: " +
+                $"frame={fullFrameWidth}x{fullFrameHeight}, " +
+                $"calibration={calibWidth}x{calibHeight}, " +
+                $"fx={fx:F3}, fy={fy:F3}, cx={cx:F3}, cy={cy:F3}"
+            );
+            loggedEffectiveIntrinsics = true;
+        }
+        return true;
     }
 
     private static byte[] TextureToRgbaBytes(Texture2D texture)

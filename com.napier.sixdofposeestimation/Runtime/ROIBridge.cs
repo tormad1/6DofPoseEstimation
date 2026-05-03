@@ -1,7 +1,7 @@
-﻿using System;
+using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
-
 
 public class ROIBridge : MonoBehaviour
 {
@@ -41,13 +41,37 @@ public class ROIBridge : MonoBehaviour
 
     void Start()
     {
-        string modelPath = System.IO.Path.Combine(
-            Application.streamingAssetsPath, "models", "yolov8m-canned.onnx");
+        string modelsDir = Path.Combine(Application.streamingAssetsPath, "models");
+        string[] candidateModelNames =
+        {
+            "yolov8m-canned.onnx",
+            "yolov8m-can-large.onnx",
+        };
+
+        string modelPath = null;
+        foreach (string candidateModelName in candidateModelNames)
+        {
+            string candidatePath = Path.Combine(modelsDir, candidateModelName);
+            if (File.Exists(candidatePath))
+            {
+                modelPath = candidatePath;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(modelPath))
+        {
+            Debug.LogError(
+                $"[ROIBridge] No ROI detector model found in {modelsDir}. " +
+                $"Tried: {string.Join(", ", candidateModelNames)}"
+            );
+            return;
+        }
+
         int result = Native.InitROI(modelPath);
         Debug.Log($"[ROIBridge] InitROI: {result}");
-
         Debug.Log($"[ROIBridge] Model path: {modelPath}");
-        Debug.Log($"[ROIBridge] File exists: {System.IO.File.Exists(modelPath)}");
+        Debug.Log($"[ROIBridge] File exists: {File.Exists(modelPath)}");
     }
 
     void OnDestroy() => Native.ShutdownROI();
@@ -58,23 +82,22 @@ public class ROIBridge : MonoBehaviour
         if (frameCount < intervalFrames) return;
         frameCount = 0;
 
-        if (webCam == null || webCam.Texture == null || !webCam.Texture.isPlaying)
+        WebCamTexture cam = webCam != null ? webCam.Texture : null;
+        if (cam == null || !cam.isPlaying)
         {
             Debug.Log($"[ROIBridge] Skipping — webcam not ready. " +
-                      $"Texture={webCam?.Texture != null}, " +
-                      $"Playing={webCam?.Texture?.isPlaying}");
+                      $"Texture={cam != null}, " +
+                      $"Playing={cam?.isPlaying}");
             return;
         }
 
         Debug.Log("[ROIBridge] Running detection...");
 
-        ProcessFrame(webCam.Texture);
+        ProcessFrame(cam);
 
-        // Update material directly using this class's own CroppedTexture
         if (CroppedTexture != null && croppedMaterial != null)
             croppedMaterial.mainTexture = CroppedTexture;
 
-        // Hand ROI, bbox, and full-frame size to GigaPose
         if (CroppedTexture != null && poseBridge != null)
         {
             poseBridge.SubmitRoi(
@@ -94,7 +117,6 @@ public class ROIBridge : MonoBehaviour
         Color32[] pixels = cam.GetPixels32();
         byte[] raw = new byte[pixels.Length * 4];
 
-        // Replace Buffer.BlockCopy with manual extraction
         for (int i = 0; i < pixels.Length; i++)
         {
             raw[i * 4 + 0] = pixels[i].r;

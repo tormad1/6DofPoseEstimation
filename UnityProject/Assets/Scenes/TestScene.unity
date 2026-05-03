@@ -186,10 +186,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d75ed5883e44caf4abc091d81488dc64, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Napier.SixDofPoseEstimation.Runtime::PoseBridge
-  useDummy: 1
+  useDummy: 0
+  dummyMode: 0
+  cpuThreads: 4
+  warmupRuntime: 0
+  objectId: 1
   croppedFrame: {fileID: 2800000, guid: f42e92b78ade0e84ea438480e7e2c07b, type: 3}
-  intervalFrames: 10
-  poseManager: {fileID: 0}
+  focalLengthPx: {x: 637.625, y: 635.462}
+  principalPointPx: {x: 317.232, y: 234.697}
+  poseManager: {fileID: 373557377}
 --- !u!1 &449560824
 GameObject:
   m_ObjectHideFlags: 0
@@ -494,7 +499,7 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1876219440}
   m_Enabled: 1
-  serializedVersion: 12
+  serializedVersion: 13
   m_Type: 1
   m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
   m_Intensity: 1
@@ -546,7 +551,7 @@ Light:
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShadowRadius: 0
+  m_ShapeRadius: 0
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1

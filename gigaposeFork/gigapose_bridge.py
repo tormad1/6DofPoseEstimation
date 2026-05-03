@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import math
 import sys
 from pathlib import Path
@@ -12,10 +13,38 @@ if SITE_PACKAGES_DIR.exists():
     if site_packages not in sys.path:
         sys.path.insert(0, site_packages)
 
+_DLL_DIR_HANDLES = []
+
+
+def _register_dll_directories():
+    candidate_dirs = [
+        REPO_DIR / ".python" / "python-3.11.9-embed-amd64",
+        SITE_PACKAGES_DIR / "numpy.libs",
+        SITE_PACKAGES_DIR / "scipy.libs",
+        SITE_PACKAGES_DIR / "pandas.libs",
+        SITE_PACKAGES_DIR / "torch" / "lib",
+    ]
+    if not hasattr(os, "add_dll_directory"):
+        return
+
+    for dll_dir in candidate_dirs:
+        if not dll_dir.exists():
+            continue
+        _DLL_DIR_HANDLES.append(os.add_dll_directory(str(dll_dir)))
+
+
+_register_dll_directories()
+
 from gigapose_runtime import create_runtime_from_paths
 
 
 _RUNTIME = None
+_MM_TO_METERS = 1.0 / 1000.0
+_BOP_TO_UNITY_BASIS = (
+    (1.0, 0.0, 0.0),
+    (0.0, -1.0, 0.0),
+    (0.0, 0.0, 1.0),
+)
 
 
 def _rotation_matrix_to_quaternion(rotation_matrix):
@@ -54,6 +83,33 @@ def _rotation_matrix_to_quaternion(rotation_matrix):
         raise ValueError("rotation matrix produced zero-length quaternion")
 
     return [qx / norm, qy / norm, qz / norm, qw / norm]
+
+
+def _matmul3x3(left, right):
+    out = []
+    for row in range(3):
+        out_row = []
+        for col in range(3):
+            value = 0.0
+            for idx in range(3):
+                value += float(left[row][idx]) * float(right[idx][col])
+            out_row.append(value)
+        out.append(out_row)
+    return out
+
+
+def _convert_bop_rotation_to_unity(rotation_matrix):
+    basis = _BOP_TO_UNITY_BASIS
+    return _matmul3x3(_matmul3x3(basis, rotation_matrix), basis)
+
+
+def _convert_bop_translation_to_unity(translation):
+    tx, ty, tz = [float(value) for value in translation]
+    return [
+        tx * _MM_TO_METERS,
+        -ty * _MM_TO_METERS,
+        tz * _MM_TO_METERS,
+    ]
 
 
 def init_runtime(
@@ -122,9 +178,19 @@ def run_roi_rgba(
     if pose is None:
         return None
 
+    raw_score = float(pose["score"])
+    unity_translation = _convert_bop_translation_to_unity(pose["t"])
+    unity_rotation = _rotation_matrix_to_quaternion(
+        _convert_bop_rotation_to_unity(pose["R"])
+    )
+
     return {
-        "translation": [float(value) for value in pose["t"]],
-        "rotation": _rotation_matrix_to_quaternion(pose["R"]),
-        "score": float(pose["score"]),
+        "translation": unity_translation,
+        "rotation": unity_rotation,
+        # GigaPose's top-1 ROI path is returning 0.0 even for a valid self-match.
+        # The native bridge already treats None as failure, so a returned pose is
+        # a usable tracking update and should not be dropped by Unity.
+        "score": 1.0,
+        "raw_score": raw_score,
         "object_id": int(pose["object_id"]),
     }

@@ -7,19 +7,14 @@ public class PoseManager : MonoBehaviour
     public Transform target;
 
     [Header("Tracking")]
-    public float confidenceThreshold = 0.6f;
+    public float confidenceThreshold = 0.0f;
     public float trackingTimeoutSeconds = 0.5f;
 
     [Header("Jump Detection")]
-    public float maxPositionDelta = 0.5f;
-    public float maxRotationDeltaDeg = 45f;
-    public float candidateConfirmDistance = 0.3f;
-    public float candidateDirectionDot = 0.6f;
+    public float maxPositionDelta = 500f;
+    public float maxRotationDeltaDeg = 80f;
+    public float candidateConfirmDistance = 1000f;
 
-    [Header("Hardcoded Pose (for testing)")]
-    public Vector3 hardcodedPosition = new Vector3(0, 1, 2);
-    public Vector3 hardcodedEulerRotation = new Vector3(0, 45, 0);
-    public float hardcodedConfidence = 0.9f;
 
     public bool TrackingLost { get; private set; } = true;
 
@@ -112,7 +107,6 @@ public class PoseManager : MonoBehaviour
 
         bool nearOld = distToOld < candidateConfirmDistance;
         bool nearCandidate = distToCandidate < candidateConfirmDistance;
-        bool continuesDirection = dirDot > candidateDirectionDot;
 
         if (nearOld)
         {
@@ -120,7 +114,7 @@ public class PoseManager : MonoBehaviour
             return;
         }
 
-        if (nearCandidate || continuesDirection)
+        if (nearCandidate)
         {
             AcceptPose(newPose);
             candidatePose = null;
@@ -147,7 +141,7 @@ public class PoseManager : MonoBehaviour
     {
         if (target == null) return;
 
-        target.position = pose.position;
+        target.position = pose.position *10;
         target.rotation = pose.rotation;
     }
 

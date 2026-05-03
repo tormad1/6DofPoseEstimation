@@ -1,0 +1,3 @@
+Initialising Python...
+InitPython returned: 1
+InitGigaPoseRuntime returned: 1 (gigaPose runtime initialized)

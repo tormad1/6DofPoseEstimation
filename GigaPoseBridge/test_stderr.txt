@@ -1,0 +1,7 @@
+F:\TormadStuff\UnityProject\6DofPoseEstimation\gigaposeFork\dinov2\dinov2\layers\swiglu_ffn.py:51: UserWarning: xFormers is not available (SwiGLU)
+  warnings.warn("xFormers is not available (SwiGLU)")
+F:\TormadStuff\UnityProject\6DofPoseEstimation\gigaposeFork\dinov2\dinov2\layers\attention.py:33: UserWarning: xFormers is not available (Attention)
+  warnings.warn("xFormers is not available (Attention)")
+F:\TormadStuff\UnityProject\6DofPoseEstimation\gigaposeFork\dinov2\dinov2\layers\block.py:40: UserWarning: xFormers is not available (Block)
+  warnings.warn("xFormers is not available (Block)")
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 78.17it/s]
